@@ -5,7 +5,7 @@ namespace RasidSync;
 
 public partial class Form1
 {
-    private Button _sendTestEventButton = null!;
+    private Button _sendPendingEventsButton = null!;
     private Button _receiveTestEventButton = null!;
     private Button _queueInvoiceButton = null!;
 
@@ -13,11 +13,11 @@ public partial class Form1
     {
         base.OnShown(e);
 
-        if (_sendTestEventButton is not null)
+        if (_sendPendingEventsButton is not null)
             return;
 
-        _sendTestEventButton = CreateSyncActionButton(
-            "إرسال حركة تجريبية",
+        _sendPendingEventsButton = CreateSyncActionButton(
+            "إرسال الحركات المعلقة",
             Color.FromArgb(181, 114, 46),
             ClientSize.Width - 430);
 
@@ -31,15 +31,15 @@ public partial class Form1
             Color.FromArgb(45, 126, 96),
             ClientSize.Width - 830);
 
-        _sendTestEventButton.Click += async (_, _) => await SendTestEventAsync();
+        _sendPendingEventsButton.Click += async (_, _) => await SendPendingEventsAsync();
         _receiveTestEventButton.Click += async (_, _) => await ReceiveTestEventsAsync();
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
 
-        Controls.Add(_sendTestEventButton);
+        Controls.Add(_sendPendingEventsButton);
         Controls.Add(_receiveTestEventButton);
         Controls.Add(_queueInvoiceButton);
 
-        _sendTestEventButton.BringToFront();
+        _sendPendingEventsButton.BringToFront();
         _receiveTestEventButton.BringToFront();
         _queueInvoiceButton.BringToFront();
     }
@@ -64,17 +64,17 @@ public partial class Form1
         return button;
     }
 
-    private async Task SendTestEventAsync()
+    private async Task SendPendingEventsAsync()
     {
-        SetBusy(_sendTestEventButton, true, "جارٍ الإرسال...");
+        SetBusy(_sendPendingEventsButton, true, "جارٍ إرسال المعلّق...");
 
         try
         {
             SyncSettings settings = ReadSettings();
             await _settingsService.SaveAsync(settings);
 
-            var service = new TestSyncService();
-            string result = await service.CreateAndSendAsync(settings);
+            var service = new PendingSyncService();
+            string result = await service.SendPendingAsync(settings);
             SetStatus(result, true);
         }
         catch (Exception ex)
@@ -83,7 +83,7 @@ public partial class Form1
         }
         finally
         {
-            SetBusy(_sendTestEventButton, false, "إرسال حركة تجريبية");
+            SetBusy(_sendPendingEventsButton, false, "إرسال الحركات المعلقة");
         }
     }
 

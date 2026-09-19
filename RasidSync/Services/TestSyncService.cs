@@ -2,32 +2,50 @@ using RasidSync.Models;
 
 namespace RasidSync.Services;
 
-public sealed class TestSyncService
+public sealed class PendingSyncService
 {
-    public async Task<string> CreateAndSendAsync(SyncSettings settings)
+    private const int MaximumEventsPerRun = 100;
+
+    public async Task<string> SendPendingAsync(SyncSettings settings)
     {
         var repository = new LocalSyncRepository(settings);
         var apiClient = new SyncApiClient(settings);
 
-        await repository.CreateTestEventAsync();
-        SyncSendRow? row = await repository.GetNextEventAsync();
+        int sentCount = 0;
+        long lastLocalSyncId = 0;
+        long lastServerEventId = 0;
 
-        if (row is null)
-            throw new InvalidOperationException("تم إنشاء الحركة لكن تعذر قراءتها من جدول الإرسال.");
-
-        try
+        while (sentCount < MaximumEventsPerRun)
         {
-            PushSyncResponse response = await apiClient.PushAsync(row);
-            await repository.MarkSentAsync(row.SyncId);
+            SyncSendRow? row = await repository.GetNextEventAsync();
+            if (row is null)
+                break;
 
-            return $"نجح إرسال الحركة المحلية {row.SyncId}، ورقمها على السيرفر {response.ServerEventId}.";
+            try
+            {
+                PushSyncResponse response = await apiClient.PushAsync(row);
+                await repository.MarkSentAsync(row.SyncId);
+
+                sentCount++;
+                lastLocalSyncId = row.SyncId;
+                lastServerEventId = response.ServerEventId;
+            }
+            catch (Exception ex)
+            {
+                await repository.MarkFailedAsync(row.SyncId, ex.Message);
+                throw new InvalidOperationException(
+                    $"فشل إرسال الحركة {row.SyncId}. توقف الإرسال عندها وبقيت محفوظة لإعادة المحاولة. {ex.Message}",
+                    ex);
+            }
         }
-        catch (Exception ex)
-        {
-            await repository.MarkFailedAsync(row.SyncId, ex.Message);
-            throw new InvalidOperationException(
-                $"فشل إرسال الحركة {row.SyncId}. بقيت محفوظة لإعادة المحاولة. {ex.Message}",
-                ex);
-        }
+
+        if (sentCount == 0)
+            return "لا توجد حركات معلقة للإرسال.";
+
+        string limitText = sentCount == MaximumEventsPerRun
+            ? " تم إرسال الحد الأقصى لهذه الدفعة، ويمكن الضغط مرة أخرى لإكمال الباقي."
+            : string.Empty;
+
+        return $"تم إرسال {sentCount} حركة بنجاح. آخر حركة محلية {lastLocalSyncId}، ورقمها على السيرفر {lastServerEventId}.{limitText}";
     }
 }
