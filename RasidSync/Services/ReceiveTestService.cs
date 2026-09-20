@@ -18,6 +18,7 @@ public sealed class ReceiveSyncService
         await repository.SaveEventsAsync(response.Events);
 
         int applied = 0;
+        int skipped = 0;
         foreach (PulledSyncEvent item in response.Events.OrderBy(x => x.ServerEventId))
         {
             int? status = await repository.GetApplyStatusAsync(item.ServerEventId);
@@ -32,13 +33,18 @@ public sealed class ReceiveSyncService
             try
             {
                 if (string.Equals(item.EntityType, "Invoice", StringComparison.OrdinalIgnoreCase))
+                {
                     await invoiceService.ApplyInsertAsync(item);
+                    applied++;
+                }
                 else
-                    throw new InvalidOperationException($"نوع الحركة '{item.EntityType}' غير مدعوم حاليًا.");
+                {
+                    // الحركات التجريبية أو الأنواع التي سنضيفها لاحقًا لا توقف طابور الفواتير.
+                    skipped++;
+                }
 
                 await repository.MarkAppliedAndAdvanceAsync(item.ServerEventId);
                 cursor = item.ServerEventId;
-                applied++;
             }
             catch (Exception ex)
             {
@@ -54,6 +60,6 @@ public sealed class ReceiveSyncService
 
         return response.Events.Count == 0
             ? $"لا توجد حركات جديدة. المؤشر الحالي {Math.Max(cursor, response.NextCursor)}."
-            : $"تم استقبال {response.Events.Count} حركة وتطبيق {applied} منها بنجاح. المؤشر {Math.Max(cursor, response.NextCursor)}.";
+            : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} فاتورة وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
