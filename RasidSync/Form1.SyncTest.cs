@@ -6,7 +6,7 @@ namespace RasidSync;
 public partial class Form1
 {
     private Button _sendPendingEventsButton = null!;
-    private Button _receiveTestEventButton = null!;
+    private Button _receiveEventsButton = null!;
     private Button _queueInvoiceButton = null!;
 
     protected override void OnShown(EventArgs e)
@@ -21,8 +21,8 @@ public partial class Form1
             Color.FromArgb(181, 114, 46),
             ClientSize.Width - 430);
 
-        _receiveTestEventButton = CreateSyncActionButton(
-            "استقبال حركات تجريبية",
+        _receiveEventsButton = CreateSyncActionButton(
+            "استقبال الحركات الجديدة",
             Color.FromArgb(91, 83, 150),
             ClientSize.Width - 630);
 
@@ -32,15 +32,15 @@ public partial class Form1
             ClientSize.Width - 830);
 
         _sendPendingEventsButton.Click += async (_, _) => await SendPendingEventsAsync();
-        _receiveTestEventButton.Click += async (_, _) => await ReceiveTestEventsAsync();
+        _receiveEventsButton.Click += async (_, _) => await ReceiveEventsAsync();
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
 
         Controls.Add(_sendPendingEventsButton);
-        Controls.Add(_receiveTestEventButton);
+        Controls.Add(_receiveEventsButton);
         Controls.Add(_queueInvoiceButton);
 
         _sendPendingEventsButton.BringToFront();
-        _receiveTestEventButton.BringToFront();
+        _receiveEventsButton.BringToFront();
         _queueInvoiceButton.BringToFront();
     }
 
@@ -87,17 +87,17 @@ public partial class Form1
         }
     }
 
-    private async Task ReceiveTestEventsAsync()
+    private async Task ReceiveEventsAsync()
     {
-        SetBusy(_receiveTestEventButton, true, "جارٍ الاستقبال...");
+        SetBusy(_receiveEventsButton, true, "جارٍ الاستقبال...");
 
         try
         {
             SyncSettings settings = ReadSettings();
             await _settingsService.SaveAsync(settings);
 
-            var service = new ReceiveTestService();
-            string result = await service.PullAndSaveAsync(settings);
+            var service = new ReceiveSyncService();
+            string result = await service.PullAndApplyAsync(settings);
             SetStatus(result, true);
         }
         catch (Exception ex)
@@ -106,7 +106,7 @@ public partial class Form1
         }
         finally
         {
-            SetBusy(_receiveTestEventButton, false, "استقبال حركات تجريبية");
+            SetBusy(_receiveEventsButton, false, "استقبال الحركات الجديدة");
         }
     }
 

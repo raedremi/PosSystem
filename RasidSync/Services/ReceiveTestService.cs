@@ -2,27 +2,58 @@ using RasidSync.Models;
 
 namespace RasidSync.Services;
 
-public sealed class ReceiveTestService
+/// <summary>
+/// ينزّل الحركات ويحفظها ثم يطبقها بالترتيب. يتوقف عند أول خطأ.
+/// </summary>
+public sealed class ReceiveSyncService
 {
-    public async Task<string> PullAndSaveAsync(SyncSettings settings)
+    public async Task<string> PullAndApplyAsync(SyncSettings settings)
     {
         var repository = new ReceiveSyncRepository(settings);
         var apiClient = new PullApiClient(settings);
+        var invoiceService = new LocalInvoiceApplyService(settings);
 
-        long lastReceivedId = await repository.GetLastReceivedIdAsync();
-        PullSyncResponse response = await apiClient.PullAsync(lastReceivedId);
+        long cursor = await repository.GetLastReceivedIdAsync();
+        PullSyncResponse response = await apiClient.PullAsync(cursor);
+        await repository.SaveEventsAsync(response.Events);
 
-        await repository.SaveEventsAndCursorAsync(
-            response.Events,
-            response.NextCursor);
-
-        if (response.Events.Count == 0)
+        int applied = 0;
+        foreach (PulledSyncEvent item in response.Events.OrderBy(x => x.ServerEventId))
         {
-            return response.NextCursor > lastReceivedId
-                ? $"لا توجد حركات لجهازك، وتم تحريك المؤشر إلى {response.NextCursor}."
-                : $"لا توجد حركات جديدة بعد الرقم {lastReceivedId}.";
+            int? status = await repository.GetApplyStatusAsync(item.ServerEventId);
+            if (status == 2)
+            {
+                await repository.AdvanceCursorAsync(item.ServerEventId);
+                cursor = item.ServerEventId;
+                continue;
+            }
+
+            await repository.MarkApplyingAsync(item.ServerEventId);
+            try
+            {
+                if (string.Equals(item.EntityType, "Invoice", StringComparison.OrdinalIgnoreCase))
+                    await invoiceService.ApplyInsertAsync(item);
+                else
+                    throw new InvalidOperationException($"نوع الحركة '{item.EntityType}' غير مدعوم حاليًا.");
+
+                await repository.MarkAppliedAndAdvanceAsync(item.ServerEventId);
+                cursor = item.ServerEventId;
+                applied++;
+            }
+            catch (Exception ex)
+            {
+                await repository.MarkFailedAsync(item.ServerEventId, ex.ToString());
+                throw new InvalidOperationException(
+                    $"فشل تطبيق حركة السيرفر {item.ServerEventId}. تم حفظ الخطأ وسنبدأ منها في المحاولة القادمة: {ex.Message}", ex);
+            }
         }
 
-        return $"تم استقبال وحفظ {response.Events.Count} حركة. أصبح LastReceivedId = {response.NextCursor}.";
+        // nextCursor قد يتجاوز آخر حدث مستلم لأن السيرفر يستبعد حركات هذا الجهاز.
+        if (response.NextCursor > cursor)
+            await repository.AdvanceCursorAsync(response.NextCursor);
+
+        return response.Events.Count == 0
+            ? $"لا توجد حركات جديدة. المؤشر الحالي {Math.Max(cursor, response.NextCursor)}."
+            : $"تم استقبال {response.Events.Count} حركة وتطبيق {applied} منها بنجاح. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
