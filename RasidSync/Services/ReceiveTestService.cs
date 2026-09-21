@@ -34,7 +34,7 @@ public sealed class ReceiveSyncService
             {
                 if (string.Equals(item.EntityType, "Invoice", StringComparison.OrdinalIgnoreCase))
                 {
-                    await invoiceService.ApplyInsertAsync(item);
+                    await invoiceService.ApplyAsync(item);
                     applied++;
                 }
                 else

@@ -116,13 +116,19 @@ public partial class Form1
         if (invoiceId is null)
             return;
 
+        int? operationType = ShowSyncOperationDialog();
+        if (operationType is null)
+            return;
+
         SetBusy(_queueInvoiceButton, true, "جارٍ تجهيز JSON...");
 
         try
         {
             SyncSettings settings = ReadSettings();
             var service = new InvoicePackageService(settings);
-            InvoiceQueueResult result = await service.BuildAndQueueAsync(invoiceId.Value);
+            InvoiceQueueResult result = await service.BuildAndQueueAsync(
+                invoiceId.Value,
+                operationType.Value);
 
             string dueText = result.HasDue ? "مع استحقاق" : "بدون استحقاق";
             SetStatus(
@@ -138,6 +144,85 @@ public partial class Form1
         {
             SetBusy(_queueInvoiceButton, false, "تجهيز JSON فاتورة");
         }
+    }
+
+    /// <summary>
+    /// اختيار نوع الحركة بشكل واضح قبل وضع الفاتورة في جدول الإرسال.
+    /// </summary>
+    private int? ShowSyncOperationDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "نوع مزامنة الفاتورة",
+            Size = new Size(430, 245),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            RightToLeft = RightToLeft.Yes,
+            RightToLeftLayout = true,
+            BackColor = Color.White,
+            Font = new Font("Segoe UI", 10F)
+        };
+
+        var title = new Label
+        {
+            Text = "اختر العملية التي ستُسجل لهذه الفاتورة",
+            Dock = DockStyle.Top,
+            Height = 55,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold)
+        };
+
+        var operation = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 320,
+            Location = new Point(48, 70),
+            Font = new Font("Segoe UI", 11F)
+        };
+        operation.Items.Add(new SyncOperationChoice(1, "إضافة فاتورة جديدة (1)"));
+        operation.Items.Add(new SyncOperationChoice(2, "تعديل فاتورة موجودة (2)"));
+        operation.Items.Add(new SyncOperationChoice(4, "استبدال كامل / إعادة إرسال (4)"));
+        operation.SelectedIndex = 0;
+
+        var acceptButton = new Button
+        {
+            Text = "متابعة",
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(45, 126, 96),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Width = 135,
+            Height = 38,
+            Location = new Point(220, 135)
+        };
+        acceptButton.FlatAppearance.BorderSize = 0;
+
+        var cancelButton = new Button
+        {
+            Text = "إلغاء",
+            DialogResult = DialogResult.Cancel,
+            Width = 110,
+            Height = 38,
+            Location = new Point(90, 135)
+        };
+
+        dialog.Controls.Add(title);
+        dialog.Controls.Add(operation);
+        dialog.Controls.Add(acceptButton);
+        dialog.Controls.Add(cancelButton);
+        dialog.AcceptButton = acceptButton;
+        dialog.CancelButton = cancelButton;
+
+        return dialog.ShowDialog(this) == DialogResult.OK
+            ? ((SyncOperationChoice)operation.SelectedItem!).Value
+            : null;
+    }
+
+    private sealed record SyncOperationChoice(int Value, string Text)
+    {
+        public override string ToString() => Text;
     }
 
     private long? ShowInvoiceIdDialog()

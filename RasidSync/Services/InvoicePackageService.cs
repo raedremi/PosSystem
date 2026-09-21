@@ -18,8 +18,12 @@ public sealed class InvoicePackageService
         _settings = settings;
     }
 
-    public async Task<InvoiceQueueResult> BuildAndQueueAsync(long invoiceId)
+    public async Task<InvoiceQueueResult> BuildAndQueueAsync(long invoiceId, int operationType)
     {
+        // في هذه المرحلة ندعم: إضافة، تعديل، واستبدال كامل.
+        if (operationType is not (1 or 2 or 4))
+            throw new InvalidOperationException("عملية المزامنة يجب أن تكون 1 أو 2 أو 4.");
+
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
 
@@ -86,7 +90,8 @@ public sealed class InvoicePackageService
             connection,
             invoiceId,
             invoiceUuid,
-            payload);
+            payload,
+            operationType);
 
         return new InvoiceQueueResult
         {
@@ -103,7 +108,8 @@ public sealed class InvoicePackageService
         MySqlConnection connection,
         long invoiceId,
         string invoiceUuid,
-        string payload)
+        string payload,
+        int operationType)
     {
         const string sql = """
             INSERT INTO tbl_sync_send
@@ -115,7 +121,7 @@ public sealed class InvoicePackageService
             VALUES
             (
                 @event_uuid, @source_device_uuid, 'Invoice', @entity_uuid,
-                @local_id, 1, @payload, 0, 0, NOW()
+                @local_id, @operation_type, @payload, 0, 0, NOW()
             );
             SELECT LAST_INSERT_ID();
             """;
@@ -125,6 +131,7 @@ public sealed class InvoicePackageService
         command.Parameters.AddWithValue("@source_device_uuid", _settings.DeviceUuid);
         command.Parameters.AddWithValue("@entity_uuid", invoiceUuid);
         command.Parameters.AddWithValue("@local_id", invoiceId);
+        command.Parameters.AddWithValue("@operation_type", operationType);
         command.Parameters.AddWithValue("@payload", payload);
 
         object? value = await command.ExecuteScalarAsync();

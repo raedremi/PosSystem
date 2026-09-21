@@ -23,7 +23,7 @@ public sealed class LocalInvoiceApplyService
 
     public LocalInvoiceApplyService(SyncSettings settings) => _settings = settings;
 
-    public async Task<InvoiceApplyResult> ApplyInsertAsync(
+    public async Task<InvoiceApplyResult> ApplyAsync(
         PulledSyncEvent syncRequest)
     {
         InvoicePackage package = BuildPackage(syncRequest);
@@ -109,8 +109,9 @@ public sealed class LocalInvoiceApplyService
     {
         if (!string.Equals(request.EntityType, "Invoice", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("نوع الحركة ليس فاتورة.");
-        if (request.OperationType != 1)
-            throw new InvalidOperationException("هذه المرحلة تدعم إضافة الفاتورة فقط.");
+        // الإضافة والتعديل والاستبدال تستخدم JSON كاملاً ونفس إعادة البناء الآمنة.
+        if (request.OperationType is not (1 or 2 or 4))
+            throw new InvalidOperationException("نوع عملية الفاتورة غير مدعوم حاليًا.");
 
         JsonElement headerJson = Required(request.Payload, "Header");
         JsonElement detailsJson = Required(request.Payload, "Details");
