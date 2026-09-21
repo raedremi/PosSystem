@@ -20,9 +20,9 @@ public sealed class InvoicePackageService
 
     public async Task<InvoiceQueueResult> BuildAndQueueAsync(long invoiceId, int operationType)
     {
-        // في هذه المرحلة ندعم: إضافة، تعديل، واستبدال كامل.
-        if (operationType is not (1 or 2 or 4))
-            throw new InvalidOperationException("عملية المزامنة يجب أن تكون 1 أو 2 أو 4.");
+        // العمليات المدعومة: إضافة، تعديل، حذف، واستبدال كامل.
+        if (operationType is not (1 or 2 or 3 or 4))
+            throw new InvalidOperationException("عملية المزامنة يجب أن تكون من 1 إلى 4.");
 
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();

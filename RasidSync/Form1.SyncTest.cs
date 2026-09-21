@@ -204,6 +204,7 @@ public partial class Form1
         };
         operation.Items.Add(new SyncOperationChoice(1, "إضافة فاتورة جديدة (1)"));
         operation.Items.Add(new SyncOperationChoice(2, "تعديل فاتورة موجودة (2)"));
+        operation.Items.Add(new SyncOperationChoice(3, "حذف فاتورة (3)"));
         operation.Items.Add(new SyncOperationChoice(4, "استبدال كامل / إعادة إرسال (4)"));
         operation.SelectedIndex = 0;
 

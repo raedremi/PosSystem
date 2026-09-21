@@ -26,6 +26,10 @@ public sealed class LocalInvoiceApplyService
     public async Task<InvoiceApplyResult> ApplyAsync(
         PulledSyncEvent syncRequest)
     {
+        // الحذف له مسار صغير مستقل ولا يحتاج إعادة تنصيب JSON.
+        if (syncRequest.OperationType == 3)
+            return await ApplyDeleteAsync(syncRequest);
+
         InvoicePackage package = BuildPackage(syncRequest);
         InvoiceResyncHeader header = package.Model.Invoice;
         string uuid = header.p_uuid!.Trim();
@@ -100,6 +104,61 @@ public sealed class LocalInvoiceApplyService
         catch
         {
             // MyISAM لا يضمن Rollback؛ المحاولة القادمة تعيد البناء من UUID نفسه.
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// يحذف الفاتورة بواسطة UUID فقط، ثم يعيد حساب الأصناف التي كانت متأثرة بها.
+    /// إذا كانت محذوفة مسبقًا نعتبر الحركة ناجحة حتى تكون إعادة المحاولة آمنة.
+    /// </summary>
+    private async Task<InvoiceApplyResult> ApplyDeleteAsync(PulledSyncEvent request)
+    {
+        if (!string.Equals(request.EntityType, "Invoice", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("نوع حركة الحذف ليس فاتورة.");
+
+        string uuid = request.EntityUuid?.Trim() ?? string.Empty;
+        if (!Guid.TryParse(uuid, out _))
+            throw new InvalidOperationException("UUID الفاتورة المطلوب حذفها غير صحيح.");
+
+        using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+        try
+        {
+            ExistingInvoice? existing = await FindExistingAsync(connection, transaction, uuid);
+            if (existing == null)
+            {
+                await transaction.CommitAsync();
+                return new InvoiceApplyResult
+                {
+                    AlreadyExists = true,
+                    Message = "الفاتورة محذوفة مسبقًا، واعتُبرت حركة الحذف ناجحة."
+                };
+            }
+
+            List<AffectedStock> affected = await ReadAffectedStocksAsync(
+                connection, transaction, existing);
+
+            // إزالة التفاصيل والسندات والدفعات والاستحقاق وتاريخ الشراء أولًا.
+            await DeleteOldEffectsAsync(connection, transaction, existing, uuid);
+            await connection.ExecuteAsync(
+                "DELETE FROM tbl_invoice WHERE inv_id=@InvoiceId AND inv_uuid=@uuid;",
+                new { existing.InvoiceId, uuid }, transaction);
+
+            await RecalculateStocksAsync(connection, transaction, affected);
+            await transaction.CommitAsync();
+
+            return new InvoiceApplyResult
+            {
+                InvoiceId = existing.InvoiceId,
+                InvNum = Convert.ToInt32(existing.InvNum),
+                Message = "تم حذف الفاتورة وعكس تفاصيلها وسنداتها وإعادة حساب المخزون."
+            };
+        }
+        catch
+        {
             await transaction.RollbackAsync();
             throw;
         }
