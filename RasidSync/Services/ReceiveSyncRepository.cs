@@ -67,6 +67,61 @@ public sealed class ReceiveSyncRepository
         "UPDATE tbl_sync_receive SET apply_status=3, retry_count=retry_count+1, last_error=@error WHERE server_event_id=@id;",
         serverEventId, error);
 
+    public async Task<bool> HasBlockedEntityAsync(string entityUuid, long beforeEventId)
+    {
+        const string sql = """
+            SELECT COUNT(*) FROM tbl_sync_receive
+            WHERE entity_uuid=@entity_uuid AND server_event_id<@event_id AND apply_status=5;
+            """;
+        await using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@entity_uuid", entityUuid);
+        command.Parameters.AddWithValue("@event_id", beforeEventId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+    }
+
+    public async Task MarkBlockedAndAdvanceAsync(
+        PulledSyncEvent item, string errorCode, string error)
+    {
+        const string sql = """
+            UPDATE tbl_sync_receive
+            SET apply_status=5, retry_count=retry_count+1, last_error=@error
+            WHERE server_event_id=@id;
+
+            INSERT INTO tbl_sync_errors
+            (
+                direction, related_id, event_uuid, entity_type, entity_uuid,
+                local_id, operation_type, error_code, error_message,
+                error_details, resolution_status, requires_support,
+                created_at, updated_at
+            )
+            VALUES
+            (
+                'Receive', @id, @event_uuid, @entity_type, @entity_uuid,
+                @local_id, @operation_type, @error_code, @error,
+                @payload, 0, 0, NOW(), NOW()
+            );
+            """;
+
+        await using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        await using (var command = new MySqlCommand(sql, connection))
+        {
+            command.Parameters.AddWithValue("@id", item.ServerEventId);
+            command.Parameters.AddWithValue("@event_uuid", item.EventUuid);
+            command.Parameters.AddWithValue("@entity_type", item.EntityType);
+            command.Parameters.AddWithValue("@entity_uuid", item.EntityUuid);
+            command.Parameters.AddWithValue("@local_id", item.LocalId ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@operation_type", item.OperationType);
+            command.Parameters.AddWithValue("@error_code", errorCode);
+            command.Parameters.AddWithValue("@error", error);
+            command.Parameters.AddWithValue("@payload", item.Payload.GetRawText());
+            await command.ExecuteNonQueryAsync();
+        }
+        await AdvanceCursorAsync(connection, item.ServerEventId);
+    }
+
     public async Task MarkAppliedAndAdvanceAsync(long serverEventId)
     {
         await using MySqlConnection connection = CreateConnection();

@@ -52,21 +52,26 @@ public sealed class LocalSyncRepository
 
     public async Task<SyncSendRow?> GetNextEventAsync()
     {
-        long lastSentId = await GetStateLongAsync("LastSentId");
-
         const string sql = """
-            SELECT sync_id, event_uuid, source_device_uuid, entity_type,
-                   entity_uuid, local_id, operation_type, payload, created_at
-            FROM tbl_sync_send
-            WHERE sync_id > @last_sent_id
-            ORDER BY sync_id
+            SELECT s.sync_id, s.event_uuid, s.source_device_uuid, s.entity_type,
+                   s.entity_uuid, s.local_id, s.operation_type, s.payload, s.created_at
+            FROM tbl_sync_send s
+            WHERE s.sync_status IN (0, 3)
+              AND NOT EXISTS
+              (
+                  SELECT 1
+                  FROM tbl_sync_send old
+                  WHERE old.entity_uuid = s.entity_uuid
+                    AND old.sync_id < s.sync_id
+                    AND old.sync_status = 5
+              )
+            ORDER BY s.sync_id
             LIMIT 1;
             """;
 
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
         await using var command = new MySqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@last_sent_id", lastSentId);
 
         await using MySqlDataReader reader = await command.ExecuteReaderAsync();
         if (!await reader.ReadAsync())
@@ -111,6 +116,10 @@ public sealed class LocalSyncRepository
             ON DUPLICATE KEY UPDATE
                 state_value = @sync_id,
                 updated_at = NOW();
+
+            UPDATE tbl_sync_errors
+            SET resolution_status=1, resolved_at=NOW(), updated_at=NOW()
+            WHERE direction='Send' AND related_id=@sync_id AND resolution_status IN (0, 3);
             """;
 
         await ExecuteStatusCommandAsync(sql, syncId, null);
@@ -128,6 +137,47 @@ public sealed class LocalSyncRepository
             """;
 
         await ExecuteStatusCommandAsync(sql, syncId, error);
+    }
+
+    /// <summary>
+    /// الخطأ التجاري يحتاج قرارًا بشريًا، لذلك لا نعيده تلقائيًا ونكمل الكيانات الأخرى.
+    /// </summary>
+    public async Task MarkBlockedAsync(SyncSendRow row, string errorCode, string error)
+    {
+        const string sql = """
+            UPDATE tbl_sync_send
+            SET sync_status=5, retry_count=retry_count+1,
+                last_attempt_at=NOW(), last_error=@last_error
+            WHERE sync_id=@sync_id;
+
+            INSERT INTO tbl_sync_errors
+            (
+                direction, related_id, event_uuid, entity_type, entity_uuid,
+                local_id, operation_type, error_code, error_message,
+                error_details, resolution_status, requires_support,
+                created_at, updated_at
+            )
+            VALUES
+            (
+                'Send', @sync_id, @event_uuid, @entity_type, @entity_uuid,
+                @local_id, @operation_type, @error_code, @last_error,
+                @payload, 0, 0, NOW(), NOW()
+            );
+            """;
+
+        await using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@sync_id", row.SyncId);
+        command.Parameters.AddWithValue("@event_uuid", row.EventUuid);
+        command.Parameters.AddWithValue("@entity_type", row.EntityType);
+        command.Parameters.AddWithValue("@entity_uuid", row.EntityUuid);
+        command.Parameters.AddWithValue("@local_id", row.LocalId ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@operation_type", row.OperationType);
+        command.Parameters.AddWithValue("@error_code", errorCode);
+        command.Parameters.AddWithValue("@last_error", error);
+        command.Parameters.AddWithValue("@payload", row.Payload);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<long> GetStateLongAsync(string key)

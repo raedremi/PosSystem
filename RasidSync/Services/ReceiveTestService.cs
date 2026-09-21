@@ -12,6 +12,7 @@ public sealed class ReceiveSyncService
         var repository = new ReceiveSyncRepository(settings);
         var apiClient = new PullApiClient(settings);
         var invoiceService = new LocalInvoiceApplyService(settings);
+        await new SyncInfrastructureService(settings).EnsureCreatedAsync();
 
         long cursor = await repository.GetLastReceivedIdAsync();
         PullSyncResponse response = await apiClient.PullAsync(cursor);
@@ -19,6 +20,7 @@ public sealed class ReceiveSyncService
 
         int applied = 0;
         int skipped = 0;
+        int blocked = 0;
         foreach (PulledSyncEvent item in response.Events.OrderBy(x => x.ServerEventId))
         {
             int? status = await repository.GetApplyStatusAsync(item.ServerEventId);
@@ -26,6 +28,18 @@ public sealed class ReceiveSyncService
             {
                 await repository.AdvanceCursorAsync(item.ServerEventId);
                 cursor = item.ServerEventId;
+                continue;
+            }
+
+            // لا نطبق حركة لاحقة لنفس الفاتورة إذا كانت لها حركة أقدم تحتاج قرارًا يدويًا.
+            if (await repository.HasBlockedEntityAsync(item.EntityUuid, item.ServerEventId))
+            {
+                await repository.MarkBlockedAndAdvanceAsync(
+                    item,
+                    "ENTITY_HAS_BLOCKED_EVENT",
+                    "توجد حركة أقدم لنفس UUID تحتاج معالجة قبل هذه الحركة.");
+                cursor = item.ServerEventId;
+                blocked++;
                 continue;
             }
 
@@ -48,6 +62,17 @@ public sealed class ReceiveSyncService
             }
             catch (Exception ex)
             {
+                if (IsInvoiceNumberConflict(ex.Message))
+                {
+                    await repository.MarkBlockedAndAdvanceAsync(
+                        item,
+                        "INVOICE_NUMBER_CONFLICT",
+                        "تعارض رقم الفاتورة مع فاتورة محلية تحمل UUID مختلفًا. لم يتم تعديل أية بيانات.");
+                    cursor = item.ServerEventId;
+                    blocked++;
+                    continue;
+                }
+
                 await repository.MarkFailedAsync(item.ServerEventId, ex.ToString());
                 throw new InvalidOperationException(
                     $"فشل تطبيق حركة السيرفر {item.ServerEventId}. تم حفظ الخطأ وسنبدأ منها في المحاولة القادمة: {ex.Message}", ex);
@@ -60,6 +85,10 @@ public sealed class ReceiveSyncService
 
         return response.Events.Count == 0
             ? $"لا توجد حركات جديدة. المؤشر الحالي {Math.Max(cursor, response.NextCursor)}."
-            : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} فاتورة وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
+            : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} فاتورة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
+
+    private static bool IsInvoiceNumberConflict(string message) =>
+        message.Contains("مستخدم لفاتورة أخرى", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("INVOICE_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase);
 }

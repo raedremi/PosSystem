@@ -8,6 +8,7 @@ public partial class Form1
     private Button _sendPendingEventsButton = null!;
     private Button _receiveEventsButton = null!;
     private Button _queueInvoiceButton = null!;
+    private Button _syncLogsButton = null!;
 
     protected override void OnShown(EventArgs e)
     {
@@ -31,17 +32,37 @@ public partial class Form1
             Color.FromArgb(45, 126, 96),
             ClientSize.Width - 830);
 
+        _syncLogsButton = CreateSyncActionButton(
+            "سجلات المزامنة",
+            Color.FromArgb(43, 108, 138),
+            ClientSize.Width - 1030);
+
         _sendPendingEventsButton.Click += async (_, _) => await SendPendingEventsAsync();
         _receiveEventsButton.Click += async (_, _) => await ReceiveEventsAsync();
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
+        _syncLogsButton.Click += async (_, _) => await OpenSyncLogsAsync();
 
         Controls.Add(_sendPendingEventsButton);
         Controls.Add(_receiveEventsButton);
         Controls.Add(_queueInvoiceButton);
+        Controls.Add(_syncLogsButton);
 
         _sendPendingEventsButton.BringToFront();
         _receiveEventsButton.BringToFront();
         _queueInvoiceButton.BringToFront();
+        _syncLogsButton.BringToFront();
+    }
+
+    private async Task OpenSyncLogsAsync()
+    {
+        try
+        {
+            SyncSettings settings = ReadSettings();
+            await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+            using var form = new SyncLogsForm(settings);
+            form.ShowDialog(this);
+        }
+        catch (Exception ex) { SetStatus(ex.Message, false); }
     }
 
     private Button CreateSyncActionButton(string text, Color color, int x)

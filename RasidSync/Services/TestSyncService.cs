@@ -10,16 +10,21 @@ public sealed class PendingSyncService
     {
         var repository = new LocalSyncRepository(settings);
         var apiClient = new SyncApiClient(settings);
+        await new SyncInfrastructureService(settings).EnsureCreatedAsync();
 
         int sentCount = 0;
+        int blockedCount = 0;
+        int processedCount = 0;
         long lastLocalSyncId = 0;
         long lastServerEventId = 0;
 
-        while (sentCount < MaximumEventsPerRun)
+        while (processedCount < MaximumEventsPerRun)
         {
             SyncSendRow? row = await repository.GetNextEventAsync();
             if (row is null)
                 break;
+
+            processedCount++;
 
             try
             {
@@ -32,6 +37,17 @@ public sealed class PendingSyncService
             }
             catch (Exception ex)
             {
+                // تعارض رقم الفاتورة يحتاج قرارًا يدويًا، لكنه لا يوقف بقية الفواتير.
+                if (IsInvoiceNumberConflict(ex.Message))
+                {
+                    await repository.MarkBlockedAsync(
+                        row,
+                        "INVOICE_NUMBER_CONFLICT",
+                        CleanServerError(ex.Message));
+                    blockedCount++;
+                    continue;
+                }
+
                 await repository.MarkFailedAsync(row.SyncId, ex.Message);
                 throw new InvalidOperationException(
                     $"فشل إرسال الحركة {row.SyncId}. توقف الإرسال عندها وبقيت محفوظة لإعادة المحاولة. {ex.Message}",
@@ -39,13 +55,27 @@ public sealed class PendingSyncService
             }
         }
 
-        if (sentCount == 0)
+        if (sentCount == 0 && blockedCount == 0)
             return "لا توجد حركات معلقة للإرسال.";
 
         string limitText = sentCount == MaximumEventsPerRun
             ? " تم إرسال الحد الأقصى لهذه الدفعة، ويمكن الضغط مرة أخرى لإكمال الباقي."
             : string.Empty;
 
-        return $"تم إرسال {sentCount} حركة بنجاح. آخر حركة محلية {lastLocalSyncId}، ورقمها على السيرفر {lastServerEventId}.{limitText}";
+        return $"تم إرسال {sentCount} حركة بنجاح، وتحويل {blockedCount} حركة إلى شاشة الأخطاء. " +
+               $"آخر حركة محلية ناجحة {lastLocalSyncId}، ورقمها على السيرفر {lastServerEventId}.{limitText}";
+    }
+
+    private static bool IsInvoiceNumberConflict(string message) =>
+        message.Contains("مستخدم لفاتورة أخرى", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("INVOICE_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase);
+
+    private static string CleanServerError(string message)
+    {
+        string prefix = "تعارض رقم الفاتورة: الرقم مستخدم لفاتورة أخرى ذات UUID مختلف. " +
+                        "لم يتم تعديل أية بيانات.";
+        return message.Contains("ExistingUuid=", StringComparison.OrdinalIgnoreCase)
+            ? prefix + Environment.NewLine + message
+            : prefix;
     }
 }

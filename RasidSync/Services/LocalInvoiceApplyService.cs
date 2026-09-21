@@ -361,13 +361,17 @@ public sealed class LocalInvoiceApplyService
         IDbConnection conn, IDbTransaction tran, long? currentId,
         long invNum, int setId, int type)
     {
-        int count = await conn.ExecuteScalarAsync<int>(
-            @"SELECT COUNT(*) FROM tbl_invoice
+        ConflictInvoice? conflict = await conn.QuerySingleOrDefaultAsync<ConflictInvoice>(
+            @"SELECT inv_id InvoiceId, inv_uuid InvoiceUuid
+              FROM tbl_invoice
               WHERE inv_num=@invNum AND inv_set_id=@setId AND inv_set_idinvo=@type
-                AND (@currentId IS NULL OR inv_id<>@currentId);",
+                AND (@currentId IS NULL OR inv_id<>@currentId)
+              LIMIT 1;",
             new { currentId, invNum, setId, type }, tran);
-        if (count > 0)
-            throw new InvalidOperationException($"رقم الفاتورة {invNum} مستخدم لفاتورة أخرى.");
+        if (conflict != null)
+            throw new InvalidOperationException(
+                $"INVOICE_NUMBER_CONFLICT|InvoiceNumber={invNum}|" +
+                $"ExistingInvoiceId={conflict.InvoiceId}|ExistingUuid={conflict.InvoiceUuid}");
     }
 
     private static Task<ExistingInvoice?> FindExistingAsync(
@@ -512,6 +516,11 @@ public sealed class LocalInvoiceApplyService
         public long InvNum { get; init; }
         public int InvoiceSetId { get; init; }
         public int InvoiceType { get; init; }
+    }
+    private sealed class ConflictInvoice
+    {
+        public long InvoiceId { get; init; }
+        public string InvoiceUuid { get; init; } = string.Empty;
     }
     private sealed class AffectedStock
     {
