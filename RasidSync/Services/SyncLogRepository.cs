@@ -82,12 +82,19 @@ public sealed class SyncLogRepository
         await using var command = new MySqlCommand(sql, connection);
         command.Parameters.AddWithValue("@key", key);
         await using MySqlDataReader reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync() || !reader.GetBoolean("permission_enabled") ||
-            reader.IsDBNull("password_hash") || reader.IsDBNull("password_salt"))
+        if (!await reader.ReadAsync())
             return false;
 
-        string expected = reader.GetString("password_hash");
-        string salt = reader.GetString("password_salt");
+        int enabledIndex = reader.GetOrdinal("permission_enabled");
+        int hashIndex = reader.GetOrdinal("password_hash");
+        int saltIndex = reader.GetOrdinal("password_salt");
+
+        if (!reader.GetBoolean(enabledIndex) ||
+            reader.IsDBNull(hashIndex) || reader.IsDBNull(saltIndex))
+            return false;
+
+        string expected = reader.GetString(hashIndex);
+        string salt = reader.GetString(saltIndex);
         string actual = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(salt + password)));
         return CryptographicOperations.FixedTimeEquals(
