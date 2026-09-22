@@ -28,11 +28,12 @@ public partial class Form1
     /// </summary>
     private async Task RunAutomaticSyncAsync()
     {
-        if (_automaticSyncRunning)
+        if (_syncOperationRunning)
             return;
 
-        _automaticSyncRunning = true;
+        _syncOperationRunning = true;
         _syncTimer.Stop();
+        SetTrayStatus(SyncTrayState.Working, "المزامنة تعمل الآن...");
 
         try
         {
@@ -50,7 +51,7 @@ public partial class Form1
         }
         finally
         {
-            _automaticSyncRunning = false;
+            _syncOperationRunning = false;
             StartAutomaticSync(_activeSyncIntervalMinutes);
         }
     }
@@ -123,6 +124,14 @@ public partial class Form1
 
     private async Task SendPendingEventsAsync()
     {
+        if (_syncOperationRunning)
+        {
+            SetStatus("توجد عملية مزامنة تعمل الآن. انتظر حتى تنتهي.", false);
+            return;
+        }
+
+        _syncOperationRunning = true;
+        SetTrayStatus(SyncTrayState.Working, "جارٍ إرسال الحركات المعلقة...");
         SetBusy(_sendPendingEventsButton, true, "جارٍ إرسال المعلّق...");
 
         try
@@ -139,12 +148,21 @@ public partial class Form1
         }
         finally
         {
+            _syncOperationRunning = false;
             SetBusy(_sendPendingEventsButton, false, "إرسال الحركات المعلقة");
         }
     }
 
     private async Task ReceiveEventsAsync()
     {
+        if (_syncOperationRunning)
+        {
+            SetStatus("توجد عملية مزامنة تعمل الآن. انتظر حتى تنتهي.", false);
+            return;
+        }
+
+        _syncOperationRunning = true;
+        SetTrayStatus(SyncTrayState.Working, "جارٍ استقبال الحركات الجديدة...");
         SetBusy(_receiveEventsButton, true, "جارٍ الاستقبال...");
 
         try
@@ -161,6 +179,7 @@ public partial class Form1
         }
         finally
         {
+            _syncOperationRunning = false;
             SetBusy(_receiveEventsButton, false, "استقبال الحركات الجديدة");
         }
     }

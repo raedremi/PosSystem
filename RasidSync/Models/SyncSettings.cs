@@ -13,4 +13,7 @@ public sealed class SyncSettings
 
     // المدة بين كل دورة مزامنة تلقائية والأخرى.
     public int SyncIntervalMinutes { get; set; } = 5;
+
+    public bool StartWithWindows { get; set; }
+    public bool MinimizeToTray { get; set; } = true;
 }

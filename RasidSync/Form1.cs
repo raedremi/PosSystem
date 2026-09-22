@@ -23,6 +23,8 @@ public partial class Form1 : Form
     private TextBox _passwordText = null!;
     private TextBox _deviceUuidText = null!;
     private NumericUpDown _syncIntervalNumber = null!;
+    private CheckBox _startWithWindowsCheck = null!;
+    private CheckBox _minimizeToTrayCheck = null!;
     private Label _statusLabel = null!;
     private FlowLayoutPanel _actionsPanel = null!;
     private readonly ToolTip _statusHint = new();
@@ -30,13 +32,14 @@ public partial class Form1 : Form
     private Button _testLocalButton = null!;
     private Button _testApiButton = null!;
     private readonly System.Windows.Forms.Timer _syncTimer = new();
-    private bool _automaticSyncRunning;
+    private bool _syncOperationRunning;
     private int _activeSyncIntervalMinutes = 5;
 
     public Form1()
     {
         InitializeComponent();
         BuildInterface();
+        InitializeTrayFeatures();
         Load += async (_, _) => await LoadSettingsAsync();
         _syncTimer.Tick += async (_, _) => await RunAutomaticSyncAsync();
         FormClosed += (_, _) => _syncTimer.Dispose();
@@ -203,10 +206,10 @@ public partial class Form1 : Form
 
     private Control BuildDeviceCard()
     {
-        var card = CreateCard("هوية الجهاز والتشغيل التلقائي", "رقم الجهاز ثابت، ويمكنك تحديد مدة المزامنة بالدقائق");
-        card.Height = 205;
+        var card = CreateCard("هوية الجهاز والتشغيل التلقائي", "تحكم بمدة المزامنة وطريقة عمل البرنامج مع Windows");
+        card.Height = 305;
 
-        var fields = CreateFieldsTable(2);
+        var fields = CreateFieldsTable(4);
 
         _deviceUuidText = CreateTextBox();
         _deviceUuidText.ReadOnly = true;
@@ -224,11 +227,28 @@ public partial class Form1 : Form
             TextAlign = HorizontalAlignment.Center
         };
 
+        _startWithWindowsCheck = CreateOptionCheckBox("تشغيل البرنامج تلقائيًا مع Windows");
+        _minimizeToTrayCheck = CreateOptionCheckBox("عند الإغلاق، إبقاء البرنامج بجانب الساعة");
+
         AddField(fields, 0, "UUID الجهاز", _deviceUuidText);
         AddField(fields, 1, "المزامنة كل (دقيقة)", _syncIntervalNumber);
+        AddField(fields, 2, "بدء التشغيل", _startWithWindowsCheck);
+        AddField(fields, 3, "العمل في الخلفية", _minimizeToTrayCheck);
         card.Controls.Add(fields);
         return card;
     }
+
+    private static CheckBox CreateOptionCheckBox(string text) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Fill,
+        Checked = true,
+        AutoSize = false,
+        TextAlign = ContentAlignment.MiddleRight,
+        CheckAlign = ContentAlignment.MiddleRight,
+        ForeColor = TextColor,
+        Font = new Font("Segoe UI", 10F)
+    };
 
     private Control BuildFooter()
     {
@@ -407,10 +427,17 @@ public partial class Form1 : Form
         _passwordText.Text = settings.LocalPassword;
         _deviceUuidText.Text = settings.DeviceUuid;
         _syncIntervalNumber.Value = Math.Clamp(settings.SyncIntervalMinutes, 1, 1440);
+        _startWithWindowsCheck.Checked = settings.StartWithWindows;
+        _minimizeToTrayCheck.Checked = settings.MinimizeToTray;
+
+        // يحدّث مسار التشغيل إذا نُقل البرنامج إلى مجلد آخر.
+        WindowsStartupService.Apply(settings.StartWithWindows);
 
         SetStatus("تم تحميل الإعدادات. أدخل البيانات ثم اختبر الاتصال.", true);
         if (HasRequiredSettings(settings))
             StartAutomaticSync(settings.SyncIntervalMinutes);
+
+        ApplyStartupWindowMode(settings);
     }
 
     private SyncSettings ReadSettings()
@@ -425,7 +452,9 @@ public partial class Form1 : Form
             LocalUsername = _usernameText.Text.Trim(),
             LocalPassword = _passwordText.Text,
             DeviceUuid = _deviceUuidText.Text.Trim(),
-            SyncIntervalMinutes = (int)_syncIntervalNumber.Value
+            SyncIntervalMinutes = (int)_syncIntervalNumber.Value,
+            StartWithWindows = _startWithWindowsCheck.Checked,
+            MinimizeToTray = _minimizeToTrayCheck.Checked
         };
     }
 
@@ -448,9 +477,17 @@ public partial class Form1 : Form
             return;
         }
 
-        await _settingsService.SaveAsync(settings);
-        StartAutomaticSync(settings.SyncIntervalMinutes);
-        SetStatus($"تم حفظ الإعدادات. المزامنة التلقائية كل {settings.SyncIntervalMinutes} دقيقة.", true);
+        try
+        {
+            await _settingsService.SaveAsync(settings);
+            WindowsStartupService.Apply(settings.StartWithWindows);
+            StartAutomaticSync(settings.SyncIntervalMinutes);
+            SetStatus($"تم حفظ الإعدادات. المزامنة التلقائية كل {settings.SyncIntervalMinutes} دقيقة.", true);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"تعذر حفظ الإعدادات: {ex.Message}", false);
+        }
     }
 
     private async Task TestLocalConnectionAsync()
@@ -535,6 +572,7 @@ public partial class Form1 : Form
         _statusLabel.ForeColor = success
             ? Color.FromArgb(31, 132, 92)
             : Color.FromArgb(190, 63, 63);
+        SetTrayStatus(success ? SyncTrayState.Success : SyncTrayState.Error, message);
     }
 
     private static void SetBusy(Button button, bool busy, string text)
