@@ -14,12 +14,17 @@ public sealed class SettingsService
 
     public SettingsService()
     {
-        string settingsFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RasidSync");
+        // نحفظ الملف بجانب RasidSync.exe ليسهل نقل البرنامج مع إعداداته.
+        _settingsPath = Path.Combine(AppContext.BaseDirectory, "settings.json");
 
-        Directory.CreateDirectory(settingsFolder);
-        _settingsPath = Path.Combine(settingsFolder, "settings.json");
+        // نقل إعدادات النسخ السابقة مرة واحدة حتى لا يضطر المستخدم لإدخالها مجددًا.
+        string oldSettingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RasidSync",
+            "settings.json");
+
+        if (!File.Exists(_settingsPath) && File.Exists(oldSettingsPath))
+            File.Copy(oldSettingsPath, _settingsPath);
     }
 
     public async Task<SyncSettings> LoadAsync()

@@ -22,18 +22,24 @@ public partial class Form1 : Form
     private TextBox _usernameText = null!;
     private TextBox _passwordText = null!;
     private TextBox _deviceUuidText = null!;
+    private NumericUpDown _syncIntervalNumber = null!;
     private Label _statusLabel = null!;
     private FlowLayoutPanel _actionsPanel = null!;
     private readonly ToolTip _statusHint = new();
     private Button _saveButton = null!;
     private Button _testLocalButton = null!;
     private Button _testApiButton = null!;
+    private readonly System.Windows.Forms.Timer _syncTimer = new();
+    private bool _automaticSyncRunning;
+    private int _activeSyncIntervalMinutes = 5;
 
     public Form1()
     {
         InitializeComponent();
         BuildInterface();
         Load += async (_, _) => await LoadSettingsAsync();
+        _syncTimer.Tick += async (_, _) => await RunAutomaticSyncAsync();
+        FormClosed += (_, _) => _syncTimer.Dispose();
     }
 
     private void BuildInterface()
@@ -197,8 +203,10 @@ public partial class Form1 : Form
 
     private Control BuildDeviceCard()
     {
-        var card = CreateCard("هوية الجهاز", "يُنشأ هذا الرقم مرة واحدة ويجب أن يبقى ثابتًا على نفس الكمبيوتر");
-        card.Height = 155;
+        var card = CreateCard("هوية الجهاز والتشغيل التلقائي", "رقم الجهاز ثابت، ويمكنك تحديد مدة المزامنة بالدقائق");
+        card.Height = 205;
+
+        var fields = CreateFieldsTable(2);
 
         _deviceUuidText = CreateTextBox();
         _deviceUuidText.ReadOnly = true;
@@ -206,14 +214,19 @@ public partial class Form1 : Form
         _deviceUuidText.Font = new Font("Consolas", 10.5F);
         _deviceUuidText.TextAlign = HorizontalAlignment.Center;
 
-        var host = new Panel
+        _syncIntervalNumber = new NumericUpDown
         {
-            Dock = DockStyle.Top,
-            Height = 54,
-            Padding = new Padding(20, 8, 20, 8)
+            Dock = DockStyle.Fill,
+            Minimum = 1,
+            Maximum = 1440,
+            Value = 5,
+            Font = new Font("Segoe UI", 10.5F),
+            TextAlign = HorizontalAlignment.Center
         };
-        host.Controls.Add(_deviceUuidText);
-        card.Controls.Add(host);
+
+        AddField(fields, 0, "UUID الجهاز", _deviceUuidText);
+        AddField(fields, 1, "المزامنة كل (دقيقة)", _syncIntervalNumber);
+        card.Controls.Add(fields);
         return card;
     }
 
@@ -393,8 +406,11 @@ public partial class Form1 : Form
         _usernameText.Text = settings.LocalUsername;
         _passwordText.Text = settings.LocalPassword;
         _deviceUuidText.Text = settings.DeviceUuid;
+        _syncIntervalNumber.Value = Math.Clamp(settings.SyncIntervalMinutes, 1, 1440);
 
         SetStatus("تم تحميل الإعدادات. أدخل البيانات ثم اختبر الاتصال.", true);
+        if (HasRequiredSettings(settings))
+            StartAutomaticSync(settings.SyncIntervalMinutes);
     }
 
     private SyncSettings ReadSettings()
@@ -408,9 +424,16 @@ public partial class Form1 : Form
             LocalDatabase = _localDatabaseText.Text.Trim(),
             LocalUsername = _usernameText.Text.Trim(),
             LocalPassword = _passwordText.Text,
-            DeviceUuid = _deviceUuidText.Text.Trim()
+            DeviceUuid = _deviceUuidText.Text.Trim(),
+            SyncIntervalMinutes = (int)_syncIntervalNumber.Value
         };
     }
+
+    private static bool HasRequiredSettings(SyncSettings settings) =>
+        !string.IsNullOrWhiteSpace(settings.ApiUrl) &&
+        !string.IsNullOrWhiteSpace(settings.OnlineDatabase) &&
+        !string.IsNullOrWhiteSpace(settings.LocalServer) &&
+        !string.IsNullOrWhiteSpace(settings.LocalDatabase);
 
     private async Task SaveSettingsAsync()
     {
@@ -426,7 +449,8 @@ public partial class Form1 : Form
         }
 
         await _settingsService.SaveAsync(settings);
-        SetStatus("تم حفظ الإعدادات بنجاح.", true);
+        StartAutomaticSync(settings.SyncIntervalMinutes);
+        SetStatus($"تم حفظ الإعدادات. المزامنة التلقائية كل {settings.SyncIntervalMinutes} دقيقة.", true);
     }
 
     private async Task TestLocalConnectionAsync()

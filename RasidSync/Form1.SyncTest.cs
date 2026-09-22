@@ -10,6 +10,51 @@ public partial class Form1
     private Button _queueInvoiceButton = null!;
     private Button _syncLogsButton = null!;
 
+    /// <summary>
+    /// يبدأ المؤقت من جديد بالقيمة المحفوظة في شاشة الإعدادات.
+    /// </summary>
+    private void StartAutomaticSync(int intervalMinutes)
+    {
+        int safeMinutes = Math.Clamp(intervalMinutes, 1, 1440);
+        _activeSyncIntervalMinutes = safeMinutes;
+        _syncTimer.Stop();
+        _syncTimer.Interval = checked(safeMinutes * 60 * 1000);
+        _syncTimer.Start();
+    }
+
+    /// <summary>
+    /// دورة المزامنة التلقائية: إرسال المعلّق ثم استقبال الجديد.
+    /// يمنع المتغير تشغيل دورتين معًا إذا استغرقت المزامنة وقتًا طويلًا.
+    /// </summary>
+    private async Task RunAutomaticSyncAsync()
+    {
+        if (_automaticSyncRunning)
+            return;
+
+        _automaticSyncRunning = true;
+        _syncTimer.Stop();
+
+        try
+        {
+            // نقرأ الملف المحفوظ حتى لا تعمل المزامنة على تعديل لم يضغط المستخدم حفظه.
+            SyncSettings settings = await _settingsService.LoadAsync();
+            string sendResult = await new PendingSyncService().SendPendingAsync(settings);
+            string receiveResult = await new ReceiveSyncService().PullAndApplyAsync(settings);
+
+            SetStatus($"مزامنة تلقائية ناجحة: {sendResult} | {receiveResult}", true);
+        }
+        catch (Exception ex)
+        {
+            // يبقى الخطأ ظاهرًا، ثم يعيد البرنامج المحاولة في الموعد التالي.
+            SetStatus($"فشلت المزامنة التلقائية: {ex.Message}", false);
+        }
+        finally
+        {
+            _automaticSyncRunning = false;
+            StartAutomaticSync(_activeSyncIntervalMinutes);
+        }
+    }
+
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
@@ -83,7 +128,6 @@ public partial class Form1
         try
         {
             SyncSettings settings = ReadSettings();
-            await _settingsService.SaveAsync(settings);
 
             var service = new PendingSyncService();
             string result = await service.SendPendingAsync(settings);
@@ -106,7 +150,6 @@ public partial class Form1
         try
         {
             SyncSettings settings = ReadSettings();
-            await _settingsService.SaveAsync(settings);
 
             var service = new ReceiveSyncService();
             string result = await service.PullAndApplyAsync(settings);

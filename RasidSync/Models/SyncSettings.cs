@@ -10,4 +10,7 @@ public sealed class SyncSettings
     public string LocalPassword { get; set; } = string.Empty;
     public string OnlineDatabase { get; set; } = string.Empty;
     public string DeviceUuid { get; set; } = Guid.NewGuid().ToString();
+
+    // المدة بين كل دورة مزامنة تلقائية والأخرى.
+    public int SyncIntervalMinutes { get; set; } = 5;
 }
