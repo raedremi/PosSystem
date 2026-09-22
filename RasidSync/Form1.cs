@@ -23,6 +23,8 @@ public partial class Form1 : Form
     private TextBox _passwordText = null!;
     private TextBox _deviceUuidText = null!;
     private Label _statusLabel = null!;
+    private FlowLayoutPanel _actionsPanel = null!;
+    private readonly ToolTip _statusHint = new();
     private Button _saveButton = null!;
     private Button _testLocalButton = null!;
     private Button _testApiButton = null!;
@@ -44,7 +46,7 @@ public partial class Form1 : Form
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(920, 650);
+        MinimumSize = new Size(850, 650);
         Size = new Size(1040, 720);
 
         var root = new TableLayoutPanel
@@ -57,7 +59,7 @@ public partial class Form1 : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
 
         root.Controls.Add(BuildHeader(), 0, 0);
         root.Controls.Add(BuildContent(), 0, 1);
@@ -217,30 +219,54 @@ public partial class Form1 : Form
 
     private Control BuildFooter()
     {
-        var footer = new Panel
+        // فصل الرسائل عن الأزرار يمنع الخطأ الطويل من تغطية أي زر.
+        var footer = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.White,
-            Padding = new Padding(34, 17, 34, 14)
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(26, 9, 26, 12)
         };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         _saveButton = CreateButton("حفظ الإعدادات", PrimaryColor);
-        _saveButton.Width = 180;
-        _saveButton.Dock = DockStyle.Right;
         _saveButton.Click += async (_, _) => await SaveSettingsAsync();
 
         _statusLabel = new Label
         {
             Text = "جاهز لإدخال الإعدادات",
             ForeColor = MutedColor,
-            AutoSize = false,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI", 10F)
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = new Font("Segoe UI", 10F),
+            Padding = new Padding(12, 5, 12, 5),
+            BackColor = Color.FromArgb(244, 247, 250),
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 0, 9)
         };
+        _statusLabel.Click += (_, _) => MessageBox.Show(
+            this, _statusLabel.Text, "تفاصيل الحالة", MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
 
-        footer.Controls.Add(_statusLabel);
-        footer.Controls.Add(_saveButton);
+        _actionsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoScroll = true,
+            RightToLeft = RightToLeft.No,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 3, 0, 0)
+        };
+        _saveButton.Margin = new Padding(4, 2, 4, 2);
+        _actionsPanel.Controls.Add(_saveButton);
+
+        footer.Controls.Add(_statusLabel, 0, 0);
+        footer.Controls.Add(_actionsPanel, 0, 1);
         return footer;
     }
 
@@ -481,6 +507,7 @@ public partial class Form1 : Form
     private void SetStatus(string message, bool success)
     {
         _statusLabel.Text = message;
+        _statusHint.SetToolTip(_statusLabel, message);
         _statusLabel.ForeColor = success
             ? Color.FromArgb(31, 132, 92)
             : Color.FromArgb(190, 63, 63);

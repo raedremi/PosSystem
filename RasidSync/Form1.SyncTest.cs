@@ -19,38 +19,30 @@ public partial class Form1
 
         _sendPendingEventsButton = CreateSyncActionButton(
             "إرسال الحركات المعلقة",
-            Color.FromArgb(181, 114, 46),
-            ClientSize.Width - 430);
+            Color.FromArgb(181, 114, 46));
 
         _receiveEventsButton = CreateSyncActionButton(
             "استقبال الحركات الجديدة",
-            Color.FromArgb(91, 83, 150),
-            ClientSize.Width - 630);
+            Color.FromArgb(91, 83, 150));
 
         _queueInvoiceButton = CreateSyncActionButton(
             "تجهيز JSON فاتورة",
-            Color.FromArgb(45, 126, 96),
-            ClientSize.Width - 830);
+            Color.FromArgb(45, 126, 96));
 
         _syncLogsButton = CreateSyncActionButton(
             "سجلات المزامنة",
-            Color.FromArgb(43, 108, 138),
-            ClientSize.Width - 1030);
+            Color.FromArgb(43, 108, 138));
 
         _sendPendingEventsButton.Click += async (_, _) => await SendPendingEventsAsync();
         _receiveEventsButton.Click += async (_, _) => await ReceiveEventsAsync();
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
         _syncLogsButton.Click += async (_, _) => await OpenSyncLogsAsync();
 
-        Controls.Add(_sendPendingEventsButton);
-        Controls.Add(_receiveEventsButton);
-        Controls.Add(_queueInvoiceButton);
-        Controls.Add(_syncLogsButton);
-
-        _sendPendingEventsButton.BringToFront();
-        _receiveEventsButton.BringToFront();
-        _queueInvoiceButton.BringToFront();
-        _syncLogsButton.BringToFront();
+        // تبقى جميع الأزرار في صف مستقل قابل للتمرير عند تضييق النافذة.
+        _actionsPanel.Controls.Add(_sendPendingEventsButton);
+        _actionsPanel.Controls.Add(_receiveEventsButton);
+        _actionsPanel.Controls.Add(_queueInvoiceButton);
+        _actionsPanel.Controls.Add(_syncLogsButton);
     }
 
     private async Task OpenSyncLogsAsync()
@@ -65,20 +57,19 @@ public partial class Form1
         catch (Exception ex) { SetStatus(ex.Message, false); }
     }
 
-    private Button CreateSyncActionButton(string text, Color color, int x)
+    private Button CreateSyncActionButton(string text, Color color)
     {
         var button = new Button
         {
             Text = text,
-            Width = 190,
+            Width = 182,
             Height = 40,
             BackColor = color,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
             Cursor = Cursors.Hand,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-            Location = new Point(x, ClientSize.Height - 65),
+            Margin = new Padding(4, 2, 4, 2),
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderSize = 0;
