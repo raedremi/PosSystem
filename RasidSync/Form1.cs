@@ -13,6 +13,7 @@ public partial class Form1 : Form
     private static readonly Color MutedColor = Color.FromArgb(103, 119, 128);
 
     private readonly SettingsService _settingsService = new();
+    private readonly DeviceIdentityService _deviceIdentityService = new();
 
     private TextBox _apiUrlText = null!;
     private TextBox _onlineDatabaseText = null!;
@@ -417,6 +418,14 @@ public partial class Form1 : Form
     private async Task LoadSettingsAsync()
     {
         SyncSettings settings = await _settingsService.LoadAsync();
+
+        // UUID هو هوية للكمبيوتر نفسه، لذلك لا نأخذه من settings.json القابل للنسخ.
+        string deviceUuid = await _deviceIdentityService.GetOrCreateAsync();
+        if (!string.Equals(settings.DeviceUuid, deviceUuid, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.DeviceUuid = deviceUuid;
+            await _settingsService.SaveAsync(settings);
+        }
 
         _apiUrlText.Text = settings.ApiUrl;
         _onlineDatabaseText.Text = settings.OnlineDatabase;
