@@ -8,6 +8,9 @@ public sealed class PendingSyncService
 
     public async Task<string> SendPendingAsync(SyncSettings settings)
     {
+        // لا نقرأ أو نرسل أية حركة قبل موافقة السيرفر على الجهاز.
+        await new DeviceAuthorizationClient(settings).EnsureAllowedAsync();
+
         var repository = new LocalSyncRepository(settings);
         var apiClient = new SyncApiClient(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();

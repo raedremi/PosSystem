@@ -25,6 +25,7 @@ public sealed class PullApiClient
             Timeout = TimeSpan.FromSeconds(30)
         };
         client.DefaultRequestHeaders.Add("X-Database", _settings.OnlineDatabase);
+        DeviceAuthorizationClient.AddDeviceHeaders(client);
 
         string requestUrl =
             $"api/sync2/pull?afterId={afterId}" +

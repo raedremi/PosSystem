@@ -40,6 +40,7 @@ public sealed class SyncApiClient
             Timeout = TimeSpan.FromSeconds(30)
         };
         client.DefaultRequestHeaders.Add("X-Database", _settings.OnlineDatabase);
+        DeviceAuthorizationClient.AddDeviceHeaders(client);
 
         using HttpResponseMessage response = await client.PostAsJsonAsync(
             "api/sync2/push-test",

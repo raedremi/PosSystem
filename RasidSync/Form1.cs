@@ -544,25 +544,13 @@ public partial class Form1 : Form
             if (string.IsNullOrWhiteSpace(settings.OnlineDatabase))
                 throw new InvalidOperationException("اسم قاعدة بيانات السيرفر مطلوب.");
 
-            using var client = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(15)
-            };
+            SyncDeviceCheckResponse result =
+                await new DeviceAuthorizationClient(settings).CheckAsync();
 
-            client.DefaultRequestHeaders.Add("X-Database", settings.OnlineDatabase);
-
-            string url =
-                $"{settings.ApiUrl}/api/sync2/pull?afterId=0" +
-                $"&deviceUuid={Uri.EscapeDataString(settings.DeviceUuid)}&limit=1";
-
-            using HttpResponseMessage response = await client.GetAsync(url);
-            string responseText = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException(
-                    $"السيرفر أعاد {(int)response.StatusCode}: {responseText}");
-
-            SetStatus($"نجح الاتصال بالـAPI وقاعدة السيرفر: {settings.OnlineDatabase}", true);
+            SetStatus(result.Allowed
+                ? $"الاتصال ناجح والجهاز مسموح له بالمزامنة: {settings.OnlineDatabase}"
+                : result.Message,
+                result.Allowed);
         }
         catch (Exception ex)
         {

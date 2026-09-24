@@ -9,6 +9,9 @@ public sealed class ReceiveSyncService
 {
     public async Task<string> PullAndApplyAsync(SyncSettings settings)
     {
+        // الجهاز الموقوف لا ينزّل الأحداث ولا يحرّك LastReceivedId.
+        await new DeviceAuthorizationClient(settings).EnsureAllowedAsync();
+
         var repository = new ReceiveSyncRepository(settings);
         var apiClient = new PullApiClient(settings);
         var invoiceService = new LocalInvoiceApplyService(settings);
