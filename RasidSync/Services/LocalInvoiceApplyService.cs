@@ -34,6 +34,7 @@ public sealed class LocalInvoiceApplyService
         InvoiceResyncHeader header = package.Model.Invoice;
         string uuid = header.p_uuid!.Trim();
         long invNum = GetRequiredInt64(package.Header, "inv_num");
+        long orderNumber = GetRequiredInt64(package.Header, "inv_number_order");
 
         using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
@@ -91,6 +92,11 @@ public sealed class LocalInvoiceApplyService
 
             await LocalInvoiceJournalService.CreateAsync(
                 connection, transaction, CreateJournalData(header, invNum));
+
+            // الفاتورة المستقبلة أصبحت جزءًا من هذه القاعدة؛ نحرك العداد للأمام فقط.
+            // GREATEST يمنع إعادة الحركة أو فاتورة قديمة من إنقاص العداد الحالي.
+            await UpdateInvoiceCountersAsync(
+                connection, transaction, header.p_set_id, invNum, orderNumber);
 
             await transaction.CommitAsync();
 
@@ -308,6 +314,21 @@ public sealed class LocalInvoiceApplyService
                 new { stock.ItemId, stock.StoreId }, tran);
         }
     }
+
+    private static Task UpdateInvoiceCountersAsync(
+        IDbConnection conn, IDbTransaction tran,
+        int invoiceSetId, long invoiceNumber, long orderNumber) =>
+        conn.ExecuteAsync(
+            @"UPDATE tbl_setinvoice
+              SET set_num_inv = GREATEST(set_num_inv, @NextInvoiceNumber),
+                  set_number_close = GREATEST(set_number_close, @NextOrderNumber)
+              WHERE set_id = @InvoiceSetId;",
+            new
+            {
+                InvoiceSetId = invoiceSetId,
+                NextInvoiceNumber = invoiceNumber + 1,
+                NextOrderNumber = orderNumber + 1
+            }, tran);
 
     private static InvoiceJournalData CreateJournalData(
         InvoiceResyncHeader h, long invNum) => new()
