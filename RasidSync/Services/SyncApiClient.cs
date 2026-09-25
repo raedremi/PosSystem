@@ -39,16 +39,13 @@ public sealed class SyncApiClient
             BaseAddress = new Uri(_settings.ApiUrl.TrimEnd('/') + "/"),
             Timeout = TimeSpan.FromSeconds(30)
         };
-        // نضع بيانات الجهاز على الطلب نفسه حتى لا تضيع عند إنشاء HttpClient جديد.
-        using var message = new HttpRequestMessage(
-            HttpMethod.Post,
-            "api/sync2/push-test");
-        message.Headers.TryAddWithoutValidation("X-Database", _settings.OnlineDatabase);
-        message.Headers.TryAddWithoutValidation("X-Device-Name", Environment.MachineName);
-        message.Headers.TryAddWithoutValidation("X-App-Version", DeviceAuthorizationClient.AppVersion);
-        message.Content = JsonContent.Create(request, options: JsonOptions);
+        client.DefaultRequestHeaders.Add("X-Database", _settings.OnlineDatabase);
+        DeviceAuthorizationClient.AddDeviceHeaders(client);
 
-        using HttpResponseMessage response = await client.SendAsync(message);
+        using HttpResponseMessage response = await client.PostAsJsonAsync(
+            "api/sync2/push-test",
+            request,
+            JsonOptions);
 
         string responseText = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)
