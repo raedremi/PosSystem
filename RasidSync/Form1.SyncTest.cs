@@ -84,7 +84,7 @@ public partial class Form1
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
         _syncLogsButton.Click += async (_, _) => await OpenSyncLogsAsync();
 
-        // تبقى جميع الأزرار في صف مستقل قابل للتمرير عند تضييق النافذة.
+        // الأزرار مرتبة عموديًا داخل لوحة الأوامر اليمنى.
         _actionsPanel.Controls.Add(_sendPendingEventsButton);
         _actionsPanel.Controls.Add(_receiveEventsButton);
         _actionsPanel.Controls.Add(_queueInvoiceButton);
@@ -108,14 +108,14 @@ public partial class Form1
         var button = new Button
         {
             Text = text,
-            Width = 182,
-            Height = 40,
+            Width = 190,
+            Height = 44,
             BackColor = color,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+            Font = new Font("Arial", 10F, FontStyle.Bold),
             Cursor = Cursors.Hand,
-            Margin = new Padding(4, 2, 4, 2),
+            Margin = new Padding(0, 4, 0, 4),
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderSize = 0;
@@ -236,7 +236,7 @@ public partial class Form1
             RightToLeft = RightToLeft.Yes,
             RightToLeftLayout = true,
             BackColor = Color.White,
-            Font = new Font("Segoe UI", 10F)
+            Font = new Font("Arial", 10F)
         };
 
         var title = new Label
@@ -245,7 +245,7 @@ public partial class Form1
             Dock = DockStyle.Top,
             Height = 55,
             TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold)
+            Font = new Font("Arial", 11F, FontStyle.Bold)
         };
 
         var operation = new ComboBox
@@ -253,7 +253,7 @@ public partial class Form1
             DropDownStyle = ComboBoxStyle.DropDownList,
             Width = 320,
             Location = new Point(48, 70),
-            Font = new Font("Segoe UI", 11F)
+            Font = new Font("Arial", 11F)
         };
         operation.Items.Add(new SyncOperationChoice(1, "إضافة فاتورة جديدة (1)"));
         operation.Items.Add(new SyncOperationChoice(2, "تعديل فاتورة موجودة (2)"));
@@ -313,7 +313,7 @@ public partial class Form1
             RightToLeft = RightToLeft.Yes,
             RightToLeftLayout = true,
             BackColor = Color.White,
-            Font = new Font("Segoe UI", 10F)
+            Font = new Font("Arial", 10F)
         };
 
         var title = new Label
@@ -322,7 +322,7 @@ public partial class Form1
             Dock = DockStyle.Top,
             Height = 55,
             TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold)
+            Font = new Font("Arial", 11F, FontStyle.Bold)
         };
 
         var invoiceNumber = new NumericUpDown
@@ -331,7 +331,7 @@ public partial class Form1
             Maximum = long.MaxValue,
             Width = 280,
             Height = 36,
-            Font = new Font("Segoe UI", 12F),
+            Font = new Font("Arial", 12F),
             TextAlign = HorizontalAlignment.Center,
             Location = new Point(48, 65)
         };

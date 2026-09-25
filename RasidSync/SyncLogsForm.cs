@@ -11,7 +11,9 @@ public sealed class SyncLogsForm : Form
     private readonly DataGridView _sendGrid = CreateGrid();
     private readonly DataGridView _receiveGrid = CreateGrid();
     private readonly DataGridView _errorGrid = CreateGrid();
-    private readonly TextBox _searchBox = new() { PlaceholderText = "بحث برقم الحركة، UUID أو سبب الخطأ", Width = 330 };
+    private readonly TextBox _searchBox = new() { PlaceholderText = "رقم الحركة، UUID أو الخطأ", Width = 190 };
+    private readonly DateTimePicker _fromDate = CreateDatePicker();
+    private readonly DateTimePicker _toDate = CreateDatePicker();
     private readonly Label _resultsLabel = new() { AutoSize = true };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
     private List<SyncLogRow> _sentRows = [];
@@ -27,30 +29,28 @@ public sealed class SyncLogsForm : Form
         StartPosition = FormStartPosition.CenterParent;
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
-        Font = new Font("Segoe UI", 10F);
+        Font = new Font("Arial", 10F);
         BackColor = Color.FromArgb(245, 247, 250);
 
-        var header = new FlowLayoutPanel
+        var root = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, Height = 60, Padding = new Padding(12),
-            FlowDirection = FlowDirection.RightToLeft, WrapContents = false
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            BackColor = BackColor, RightToLeft = RightToLeft.No
         };
-        header.Controls.Add(new Label
-        {
-            Text = "سجلات المزامنة", AutoSize = true,
-            Font = new Font("Segoe UI", 14F, FontStyle.Bold), ForeColor = Color.FromArgb(30, 60, 75)
-        });
-        header.Controls.Add(_searchBox);
-        header.Controls.Add(CreateButton("تحديث", ReloadAsync));
-        header.Controls.Add(_resultsLabel);
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 245));
+
+        _fromDate.Value = DateTime.Today;
+        _toDate.Value = DateTime.Today;
         _searchBox.TextChanged += (_, _) => ApplyFilter();
 
         _tabs.TabPages.Add(CreateLogPage("الحركات المرسلة", _sendGrid));
         _tabs.TabPages.Add(CreateLogPage("الحركات المستقبلة", _receiveGrid));
         _tabs.TabPages.Add(CreateErrorsPage());
         _tabs.SelectedIndexChanged += (_, _) => ApplyFilter();
-        Controls.Add(_tabs);
-        Controls.Add(header);
+        root.Controls.Add(_tabs, 0, 0);
+        root.Controls.Add(BuildRightPanel(), 1, 0);
+        Controls.Add(root);
 
         ConfigureColumns();
         _sendGrid.SelectionChanged += (_, _) => UpdateDetails();
@@ -60,24 +60,64 @@ public sealed class SyncLogsForm : Form
         Shown += async (_, _) => await ReloadAsync();
     }
 
+    private Control BuildRightPanel()
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+            WrapContents = false, AutoScroll = true, BackColor = Color.White,
+            Padding = new Padding(16), RightToLeft = RightToLeft.Yes
+        };
+
+        panel.Controls.Add(new Label
+        {
+            Text = "بحث السجلات", Width = 195, Height = 40,
+            Font = new Font("Arial", 14F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(30, 60, 75), TextAlign = ContentAlignment.MiddleRight
+        });
+        panel.Controls.Add(CreateSideLabel("من تاريخ"));
+        panel.Controls.Add(_fromDate);
+        panel.Controls.Add(CreateSideLabel("إلى تاريخ"));
+        panel.Controls.Add(_toDate);
+        panel.Controls.Add(CreateSideLabel("بحث ضمن النتائج"));
+        panel.Controls.Add(_searchBox);
+        panel.Controls.Add(CreateButton("بحث", ReloadAsync));
+        panel.Controls.Add(CreateButton("حركات اليوم", ShowTodayAsync, Color.FromArgb(45, 126, 96)));
+        panel.Controls.Add(_resultsLabel);
+        panel.Controls.Add(CreateSeparator());
+        panel.Controls.Add(CreateSideLabel("معالجة الأخطاء"));
+        panel.Controls.Add(CreateButton("إعادة المحاولة", RetrySelectedAsync));
+        panel.Controls.Add(CreateButton("فتح التفاصيل", ShowDetailsAsync));
+        panel.Controls.Add(CreateButton("فتح الفاتورة المحلية", ShowLocalInvoiceAsync));
+        panel.Controls.Add(CreateButton("إلغاء الحركة", CancelSelectedAsync, Color.Firebrick));
+        panel.Controls.Add(CreateButton("اعتبارهما نفس الفاتورة - دعم", SupportMergeAsync, Color.DarkSlateBlue));
+        panel.Controls.Add(CreateButton("تصدير الخطأ", ExportSelectedAsync));
+        return panel;
+    }
+
+    private static Label CreateSideLabel(string text) => new()
+    {
+        Text = text, Width = 195, Height = 25,
+        Font = new Font("Arial", 10F, FontStyle.Bold),
+        ForeColor = Color.FromArgb(55, 75, 88), TextAlign = ContentAlignment.BottomRight,
+        Margin = new Padding(0, 7, 0, 0)
+    };
+
+    private static DateTimePicker CreateDatePicker() => new()
+    {
+        Width = 195, Format = DateTimePickerFormat.Custom,
+        CustomFormat = "yyyy-MM-dd", Font = new Font("Arial", 10F)
+    };
+
+    private static Panel CreateSeparator() => new()
+    {
+        Width = 195, Height = 1, BackColor = Color.FromArgb(220, 228, 233),
+        Margin = new Padding(0, 15, 0, 8)
+    };
+
     private TabPage CreateErrorsPage()
     {
-        var page = CreateLogPage("الأخطاء", _errorGrid);
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom, Height = 62, AutoScroll = true,
-            FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(8)
-        };
-        actions.Controls.Add(CreateButton("تحديث", async () => await ReloadAsync()));
-        actions.Controls.Add(CreateButton("إعادة المحاولة", RetrySelectedAsync));
-        actions.Controls.Add(CreateButton("فتح التفاصيل", ShowDetailsAsync));
-        actions.Controls.Add(CreateButton("فتح الفاتورة المحلية", ShowLocalInvoiceAsync));
-        actions.Controls.Add(CreateButton("إلغاء الحركة", CancelSelectedAsync, Color.Firebrick));
-        actions.Controls.Add(CreateButton("اعتبارهما نفس الفاتورة - دعم", SupportMergeAsync, Color.DarkSlateBlue));
-        actions.Controls.Add(CreateButton("تصدير الخطأ", ExportSelectedAsync));
-        page.Controls.Add(actions);
-        actions.BringToFront();
-        return page;
+        return CreateLogPage("الأخطاء", _errorGrid);
     }
 
     private TabPage CreateLogPage(string title, DataGridView grid)
@@ -96,7 +136,7 @@ public sealed class SyncLogsForm : Form
         reasonText.RightToLeft = RightToLeft.Yes;
         reasonText.WordWrap = true;
         reasonText.ScrollBars = ScrollBars.Vertical;
-        reasonText.Font = new Font("Segoe UI", 10.5F);
+        reasonText.Font = new Font("Arial", 10.5F);
         var payloadText = CreateDetailsBox();
         explanation.Controls.Add(reasonText);
         payload.Controls.Add(payloadText);
@@ -120,7 +160,7 @@ public sealed class SyncLogsForm : Form
     {
         Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
         ScrollBars = ScrollBars.Both, WordWrap = false,
-        Font = new Font("Consolas", 10F), BackColor = Color.White,
+        Font = new Font("Arial", 10F), BackColor = Color.White,
         BorderStyle = BorderStyle.None, RightToLeft = RightToLeft.No
     };
 
@@ -185,7 +225,7 @@ public sealed class SyncLogsForm : Form
         {
             grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(225, 239, 244);
             grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(35, 55, 70);
-            grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            grid.ColumnHeadersDefaultCellStyle.Font = new Font("Arial", 10F, FontStyle.Bold);
             grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(207, 234, 242);
             grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(25, 45, 60);
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 252);
@@ -225,9 +265,11 @@ public sealed class SyncLogsForm : Form
     {
         var button = new Button
         {
-            Text = text, AutoSize = true, Height = 36,
+            Text = text, Width = 195, Height = 38,
             BackColor = color ?? Color.FromArgb(43, 108, 138),
-            ForeColor = Color.White, FlatStyle = FlatStyle.Flat
+            ForeColor = Color.White, FlatStyle = FlatStyle.Flat,
+            Font = new Font("Arial", 9.5F, FontStyle.Bold),
+            Margin = new Padding(0, 4, 0, 4)
         };
         button.FlatAppearance.BorderSize = 0;
         button.Click += async (_, _) => await action();
@@ -238,12 +280,25 @@ public sealed class SyncLogsForm : Form
     {
         try
         {
-            _sentRows = await _repository.GetSendRowsAsync();
-            _receivedRows = await _repository.GetReceiveRowsAsync();
-            _errorRows = await _repository.GetErrorsAsync();
+            DateTime from = _fromDate.Value.Date;
+            DateTime to = _toDate.Value.Date;
+            if (from > to)
+                throw new InvalidOperationException("تاريخ البداية يجب أن يكون قبل تاريخ النهاية.");
+
+            DateTime toExclusive = to.AddDays(1);
+            _sentRows = await _repository.GetSendRowsAsync(from, toExclusive);
+            _receivedRows = await _repository.GetReceiveRowsAsync(from, toExclusive);
+            _errorRows = await _repository.GetErrorsAsync(from, toExclusive);
             ApplyFilter();
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "تعذر تحميل السجلات", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+
+    private async Task ShowTodayAsync()
+    {
+        _fromDate.Value = DateTime.Today;
+        _toDate.Value = DateTime.Today;
+        await ReloadAsync();
     }
 
     private void ApplyFilter()

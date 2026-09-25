@@ -52,7 +52,7 @@ public partial class Form1 : Form
 
         Text = "Rasid Sync - إعدادات المزامنة";
         BackColor = PageColor;
-        Font = new Font("Segoe UI", 10F);
+        Font = new Font("Arial", 10F);
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
         StartPosition = FormStartPosition.CenterScreen;
@@ -69,10 +69,10 @@ public partial class Form1 : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
 
         root.Controls.Add(BuildHeader(), 0, 0);
-        root.Controls.Add(BuildContent(), 0, 1);
+        root.Controls.Add(BuildWorkspace(), 0, 1);
         root.Controls.Add(BuildFooter(), 0, 2);
 
         Controls.Add(root);
@@ -92,7 +92,7 @@ public partial class Form1 : Form
         {
             Text = "إعدادات مزامنة رصيد",
             ForeColor = Color.White,
-            Font = new Font("Segoe UI", 20F, FontStyle.Bold),
+            Font = new Font("Arial", 20F, FontStyle.Bold),
             AutoSize = true,
             Location = new Point(34, 18)
         };
@@ -101,7 +101,7 @@ public partial class Form1 : Form
         {
             Text = "ربط قاعدة البيانات المحلية بقاعدة البيانات الموجودة على السيرفر",
             ForeColor = Color.FromArgb(218, 235, 239),
-            Font = new Font("Segoe UI", 10.5F),
+            Font = new Font("Arial", 10.5F),
             AutoSize = true,
             Location = new Point(37, 61)
         };
@@ -151,6 +151,67 @@ public partial class Form1 : Form
         return scrollPanel;
     }
 
+    private Control BuildWorkspace()
+    {
+        // لوحة الأوامر ثابتة إلى يمين الشاشة، والإعدادات تبقى في المساحة اليسرى.
+        var workspace = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = PageColor,
+            RightToLeft = RightToLeft.No
+        };
+        workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 225));
+        workspace.Controls.Add(BuildContent(), 0, 0);
+        workspace.Controls.Add(BuildActionsPanel(), 1, 0);
+        return workspace;
+    }
+
+    private Control BuildActionsPanel()
+    {
+        var host = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding = new Padding(14, 22, 14, 14)
+        };
+
+        var title = new Label
+        {
+            Text = "الأوامر",
+            Dock = DockStyle.Top,
+            Height = 42,
+            Font = new Font("Arial", 13F, FontStyle.Bold),
+            ForeColor = TextColor,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+
+        _actionsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(0, 8, 0, 0)
+        };
+
+        _saveButton = CreateButton("حفظ الإعدادات", PrimaryColor);
+        _saveButton.Width = 190;
+        _saveButton.Click += async (_, _) => await SaveSettingsAsync();
+        _actionsPanel.Controls.Add(_saveButton);
+        _testLocalButton.Width = 190;
+        _testApiButton.Width = 190;
+        _actionsPanel.Controls.Add(_testLocalButton);
+        _actionsPanel.Controls.Add(_testApiButton);
+
+        host.Controls.Add(_actionsPanel);
+        host.Controls.Add(title);
+        return host;
+    }
+
     private Control BuildLocalDatabaseCard()
     {
         var card = CreateCard("قاعدة البيانات المحلية", "بيانات الاتصال بقاعدة رصيد الموجودة على هذا الكمبيوتر");
@@ -163,7 +224,7 @@ public partial class Form1 : Form
             Minimum = 1,
             Maximum = 65535,
             Value = 3306,
-            Font = new Font("Segoe UI", 10.5F),
+            Font = new Font("Arial", 10.5F),
             TextAlign = HorizontalAlignment.Left,
             Height = 34
         };
@@ -182,7 +243,6 @@ public partial class Form1 : Form
         _testLocalButton.Click += async (_, _) => await TestLocalConnectionAsync();
 
         card.Controls.Add(fields);
-        card.Controls.Add(CreateButtonHost(_testLocalButton));
         return card;
     }
 
@@ -201,7 +261,6 @@ public partial class Form1 : Form
         _testApiButton.Click += async (_, _) => await TestApiConnectionAsync();
 
         card.Controls.Add(fields);
-        card.Controls.Add(CreateButtonHost(_testApiButton));
         return card;
     }
 
@@ -215,7 +274,7 @@ public partial class Form1 : Form
         _deviceUuidText = CreateTextBox();
         _deviceUuidText.ReadOnly = true;
         _deviceUuidText.BackColor = Color.FromArgb(240, 244, 246);
-        _deviceUuidText.Font = new Font("Consolas", 10.5F);
+        _deviceUuidText.Font = new Font("Arial", 10.5F);
         _deviceUuidText.TextAlign = HorizontalAlignment.Center;
 
         _syncIntervalNumber = new NumericUpDown
@@ -224,7 +283,7 @@ public partial class Form1 : Form
             Minimum = 1,
             Maximum = 1440,
             Value = 5,
-            Font = new Font("Segoe UI", 10.5F),
+            Font = new Font("Arial", 10.5F),
             TextAlign = HorizontalAlignment.Center
         };
 
@@ -248,26 +307,18 @@ public partial class Form1 : Form
         TextAlign = ContentAlignment.MiddleRight,
         CheckAlign = ContentAlignment.MiddleRight,
         ForeColor = TextColor,
-        Font = new Font("Segoe UI", 10F)
+        Font = new Font("Arial", 10F)
     };
 
     private Control BuildFooter()
     {
-        // فصل الرسائل عن الأزرار يمنع الخطأ الطويل من تغطية أي زر.
-        var footer = new TableLayoutPanel
+        // شريط الحالة مستقل عن الأزرار حتى يظهر الخطأ الطويل بوضوح.
+        var footer = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.White,
-            ColumnCount = 1,
-            RowCount = 2,
             Padding = new Padding(26, 9, 26, 12)
         };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        _saveButton = CreateButton("حفظ الإعدادات", PrimaryColor);
-        _saveButton.Click += async (_, _) => await SaveSettingsAsync();
 
         _statusLabel = new Label
         {
@@ -276,31 +327,17 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleRight,
-            Font = new Font("Segoe UI", 10F),
+            Font = new Font("Arial", 10F),
             Padding = new Padding(12, 5, 12, 5),
             BackColor = Color.FromArgb(244, 247, 250),
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 0, 9)
+            Margin = Padding.Empty
         };
         _statusLabel.Click += (_, _) => MessageBox.Show(
             this, _statusLabel.Text, "تفاصيل الحالة", MessageBoxButtons.OK,
             MessageBoxIcon.Information);
 
-        _actionsPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoScroll = true,
-            RightToLeft = RightToLeft.No,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 3, 0, 0)
-        };
-        _saveButton.Margin = new Padding(4, 2, 4, 2);
-        _actionsPanel.Controls.Add(_saveButton);
-
-        footer.Controls.Add(_statusLabel, 0, 0);
-        footer.Controls.Add(_actionsPanel, 0, 1);
+        footer.Controls.Add(_statusLabel);
         return footer;
     }
 
@@ -319,7 +356,7 @@ public partial class Form1 : Form
             Text = titleText,
             Dock = DockStyle.Top,
             Height = 34,
-            Font = new Font("Segoe UI", 13F, FontStyle.Bold),
+            Font = new Font("Arial", 13F, FontStyle.Bold),
             ForeColor = TextColor,
             TextAlign = ContentAlignment.MiddleRight
         };
@@ -329,7 +366,7 @@ public partial class Form1 : Form
             Text = subtitleText,
             Dock = DockStyle.Top,
             Height = 43,
-            Font = new Font("Segoe UI", 9.5F),
+            Font = new Font("Arial", 9.5F),
             ForeColor = MutedColor,
             TextAlign = ContentAlignment.TopRight
         };
@@ -366,7 +403,7 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = TextColor,
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            Font = new Font("Arial", 9.5F, FontStyle.Bold),
             Margin = new Padding(5, 4, 5, 5)
         };
 
@@ -381,7 +418,7 @@ public partial class Form1 : Form
         {
             Dock = DockStyle.Fill,
             BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 10.5F),
+            Font = new Font("Arial", 10.5F),
             RightToLeft = RightToLeft.No
         };
     }
@@ -396,23 +433,10 @@ public partial class Form1 : Form
             BackColor = color,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+            Font = new Font("Arial", 10F, FontStyle.Bold),
             Cursor = Cursors.Hand,
             UseVisualStyleBackColor = false
         };
-    }
-
-    private static Panel CreateButtonHost(Button button)
-    {
-        button.Dock = DockStyle.Right;
-        var host = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 52,
-            Padding = new Padding(0, 6, 0, 4)
-        };
-        host.Controls.Add(button);
-        return host;
     }
 
     private async Task LoadSettingsAsync()

@@ -12,23 +12,27 @@ public sealed class SyncLogRepository
     private readonly SyncSettings _settings;
     public SyncLogRepository(SyncSettings settings) => _settings = settings;
 
-    public Task<List<SyncLogRow>> GetSendRowsAsync() => ReadLogsAsync("""
+    public Task<List<SyncLogRow>> GetSendRowsAsync(DateTime from, DateTime toExclusive) => ReadLogsAsync("""
         SELECT sync_id Id, entity_type EntityType, entity_uuid EntityUuid,
                local_id LocalId, operation_type OperationType,
                sync_status Status, retry_count RetryCount,
                created_at CreatedAt, last_error Error
-        FROM tbl_sync_send ORDER BY sync_id DESC LIMIT 500;
-        """);
+        FROM tbl_sync_send
+        WHERE created_at >= @from AND created_at < @to
+        ORDER BY sync_id DESC LIMIT 2000;
+        """, from, toExclusive);
 
-    public Task<List<SyncLogRow>> GetReceiveRowsAsync() => ReadLogsAsync("""
+    public Task<List<SyncLogRow>> GetReceiveRowsAsync(DateTime from, DateTime toExclusive) => ReadLogsAsync("""
         SELECT server_event_id Id, entity_type EntityType, entity_uuid EntityUuid,
                NULL LocalId, operation_type OperationType,
                apply_status Status, retry_count RetryCount,
                received_at CreatedAt, last_error Error
-        FROM tbl_sync_receive ORDER BY server_event_id DESC LIMIT 500;
-        """);
+        FROM tbl_sync_receive
+        WHERE received_at >= @from AND received_at < @to
+        ORDER BY server_event_id DESC LIMIT 2000;
+        """, from, toExclusive);
 
-    public async Task<List<SyncErrorRow>> GetErrorsAsync()
+    public async Task<List<SyncErrorRow>> GetErrorsAsync(DateTime from, DateTime toExclusive)
     {
         const string sql = """
             SELECT error_id ErrorId, direction Direction, related_id RelatedId,
@@ -36,11 +40,13 @@ public sealed class SyncLogRepository
                    operation_type OperationType, error_code ErrorCode,
                    error_message ErrorMessage, error_details ErrorDetails,
                    resolution_status ResolutionStatus, created_at CreatedAt
-            FROM tbl_sync_errors ORDER BY error_id DESC LIMIT 500;
+            FROM tbl_sync_errors
+            WHERE created_at >= @from AND created_at < @to
+            ORDER BY error_id DESC LIMIT 2000;
             """;
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
-        return (await connection.QueryAsync<SyncErrorRow>(sql)).ToList();
+        return (await connection.QueryAsync<SyncErrorRow>(sql, new { from, to = toExclusive })).ToList();
     }
 
     public async Task RetryAsync(SyncErrorRow error)
@@ -102,11 +108,11 @@ public sealed class SyncLogRepository
             Encoding.UTF8.GetBytes(actual));
     }
 
-    private async Task<List<SyncLogRow>> ReadLogsAsync(string sql)
+    private async Task<List<SyncLogRow>> ReadLogsAsync(string sql, DateTime from, DateTime toExclusive)
     {
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
-        return (await connection.QueryAsync<SyncLogRow>(sql)).ToList();
+        return (await connection.QueryAsync<SyncLogRow>(sql, new { from, to = toExclusive })).ToList();
     }
 
     private async Task ExecuteAsync(string sql, SyncErrorRow error)

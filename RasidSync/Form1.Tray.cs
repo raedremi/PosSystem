@@ -22,7 +22,7 @@ public partial class Form1
         var menu = new ContextMenuStrip
         {
             RightToLeft = RightToLeft.Yes,
-            Font = new Font("Segoe UI", 10F)
+            Font = new Font("Arial", 10F)
         };
 
         menu.Items.Add("فتح برنامج المزامنة", null, (_, _) => ShowMainWindow());
