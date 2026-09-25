@@ -24,15 +24,18 @@ public sealed class PullApiClient
             BaseAddress = new Uri(_settings.ApiUrl.TrimEnd('/') + "/"),
             Timeout = TimeSpan.FromSeconds(30)
         };
-        client.DefaultRequestHeaders.Add("X-Database", _settings.OnlineDatabase);
-        DeviceAuthorizationClient.AddDeviceHeaders(client);
-
         string requestUrl =
             $"api/sync2/pull?afterId={afterId}" +
             $"&deviceUuid={Uri.EscapeDataString(_settings.DeviceUuid)}" +
             $"&limit={limit}";
 
-        using HttpResponseMessage response = await client.GetAsync(requestUrl);
+        // تثبيت رؤوس تعريف الجهاز على طلب الاستقبال نفسه.
+        using var message = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+        message.Headers.TryAddWithoutValidation("X-Database", _settings.OnlineDatabase);
+        message.Headers.TryAddWithoutValidation("X-Device-Name", Environment.MachineName);
+        message.Headers.TryAddWithoutValidation("X-App-Version", DeviceAuthorizationClient.AppVersion);
+
+        using HttpResponseMessage response = await client.SendAsync(message);
         string responseText = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
