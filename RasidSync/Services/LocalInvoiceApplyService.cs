@@ -542,8 +542,28 @@ public sealed class LocalInvoiceApplyService
     private static long GetRequiredInt64(JsonElement json, string name)
     {
         JsonElement value = Required(json, name);
-        return value.ValueKind == JsonValueKind.Number
-            ? value.GetInt64() : long.Parse(value.ToString(), CultureInfo.InvariantCulture);
+
+        // بعض برامج MySQL/Newtonsoft ترسل DECIMAL الصحيح بالشكل 201.0.
+        // نقبله ما دام لا يحتوي جزءًا كسريًا فعليًا، مع قبول 201 و "201" أيضًا.
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            if (value.TryGetInt64(out long integerValue))
+                return integerValue;
+
+            if (value.TryGetDecimal(out decimal decimalValue) &&
+                decimalValue == decimal.Truncate(decimalValue) &&
+                decimalValue >= long.MinValue && decimalValue <= long.MaxValue)
+                return decimal.ToInt64(decimalValue);
+        }
+
+        if (decimal.TryParse(
+                value.ToString(), NumberStyles.Number,
+                CultureInfo.InvariantCulture, out decimal textValue) &&
+            textValue == decimal.Truncate(textValue) &&
+            textValue >= long.MinValue && textValue <= long.MaxValue)
+            return decimal.ToInt64(textValue);
+
+        throw new FormatException($"الحقل {name} يجب أن يكون رقمًا صحيحًا.");
     }
 
     private static JsonElement Required(JsonElement json, string name) =>
