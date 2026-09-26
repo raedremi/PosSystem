@@ -40,21 +40,24 @@ public sealed class PendingSyncService
             }
             catch (Exception ex)
             {
-                // تعارض رقم الفاتورة يحتاج قرارًا يدويًا، لكنه لا يوقف بقية الفواتير.
-                if (IsInvoiceNumberConflict(ex.Message))
+                string errorCode = SyncFailureClassifier.GetErrorCode(ex);
+                string errorMessage = CleanServerError(
+                    SyncFailureClassifier.GetFullMessage(ex), errorCode);
+
+                // انقطاع الاتصال أو عطل السيرفر مشكلة عامة؛ نوقف الدورة ونحاول لاحقًا.
+                if (SyncFailureClassifier.IsInfrastructureFailure(ex))
                 {
-                    await repository.MarkBlockedAsync(
-                        row,
-                        "INVOICE_NUMBER_CONFLICT",
-                        CleanServerError(ex.Message));
-                    blockedCount++;
-                    continue;
+                    await repository.MarkFailedAsync(row, errorCode, errorMessage);
+                    throw new InvalidOperationException(
+                        $"توقفت دورة الإرسال بسبب مشكلة اتصال أو سيرفر عند الحركة {row.SyncId}. " +
+                        "بقيت الحركة محفوظة لإعادة المحاولة. " + errorMessage,
+                        ex);
                 }
 
-                await repository.MarkFailedAsync(row.SyncId, ex.Message);
-                throw new InvalidOperationException(
-                    $"فشل إرسال الحركة {row.SyncId}. توقف الإرسال عندها وبقيت محفوظة لإعادة المحاولة. {ex.Message}",
-                    ex);
+                // خطأ خاص بهذه الفاتورة: نعزلها ونكمل الفواتير الأخرى.
+                await repository.MarkBlockedAsync(row, errorCode, errorMessage);
+                blockedCount++;
+                continue;
             }
         }
 
@@ -69,12 +72,11 @@ public sealed class PendingSyncService
                $"آخر حركة محلية ناجحة {lastLocalSyncId}، ورقمها على السيرفر {lastServerEventId}.{limitText}";
     }
 
-    private static bool IsInvoiceNumberConflict(string message) =>
-        message.Contains("مستخدم لفاتورة أخرى", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("INVOICE_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase);
-
-    private static string CleanServerError(string message)
+    private static string CleanServerError(string message, string errorCode)
     {
+        if (errorCode != "INVOICE_NUMBER_CONFLICT")
+            return message;
+
         string prefix = "تعارض رقم الفاتورة: الرقم مستخدم لفاتورة أخرى ذات UUID مختلف. " +
                         "لم يتم تعديل أية بيانات.";
         return message.Contains("ExistingUuid=", StringComparison.OrdinalIgnoreCase)

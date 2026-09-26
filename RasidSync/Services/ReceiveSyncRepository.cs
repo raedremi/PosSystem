@@ -63,9 +63,36 @@ public sealed class ReceiveSyncRepository
         "UPDATE tbl_sync_receive SET apply_status=1, last_error=NULL WHERE server_event_id=@id;",
         serverEventId);
 
-    public Task MarkFailedAsync(long serverEventId, string error) => ExecuteEventUpdateAsync(
-        "UPDATE tbl_sync_receive SET apply_status=3, retry_count=retry_count+1, last_error=@error WHERE server_event_id=@id;",
-        serverEventId, error);
+    public async Task MarkFailedAsync(
+        PulledSyncEvent item, string errorCode, string error)
+    {
+        const string sql = """
+            UPDATE tbl_sync_receive
+            SET apply_status=3, retry_count=retry_count+1, last_error=@error
+            WHERE server_event_id=@id;
+
+            INSERT INTO tbl_sync_errors
+            (
+                direction, related_id, event_uuid, entity_type, entity_uuid,
+                local_id, operation_type, error_code, error_message,
+                error_details, resolution_status, requires_support,
+                created_at, updated_at
+            )
+            SELECT
+                'Receive', @id, @event_uuid, @entity_type, @entity_uuid,
+                @local_id, @operation_type, @error_code, @error,
+                @payload, 0, 0, NOW(), NOW()
+            FROM DUAL
+            WHERE NOT EXISTS
+            (
+                SELECT 1 FROM tbl_sync_errors
+                WHERE direction='Receive' AND related_id=@id
+                  AND resolution_status IN (0, 3)
+            );
+            """;
+
+        await ExecuteEventErrorAsync(sql, item, errorCode, error);
+    }
 
     public async Task<bool> HasBlockedEntityAsync(string entityUuid, long beforeEventId)
     {
@@ -96,29 +123,22 @@ public sealed class ReceiveSyncRepository
                 error_details, resolution_status, requires_support,
                 created_at, updated_at
             )
-            VALUES
-            (
+            SELECT
                 'Receive', @id, @event_uuid, @entity_type, @entity_uuid,
                 @local_id, @operation_type, @error_code, @error,
                 @payload, 0, 0, NOW(), NOW()
+            FROM DUAL
+            WHERE NOT EXISTS
+            (
+                SELECT 1 FROM tbl_sync_errors
+                WHERE direction='Receive' AND related_id=@id
+                  AND resolution_status IN (0, 3)
             );
             """;
 
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
-        await using (var command = new MySqlCommand(sql, connection))
-        {
-            command.Parameters.AddWithValue("@id", item.ServerEventId);
-            command.Parameters.AddWithValue("@event_uuid", item.EventUuid);
-            command.Parameters.AddWithValue("@entity_type", item.EntityType);
-            command.Parameters.AddWithValue("@entity_uuid", item.EntityUuid);
-            command.Parameters.AddWithValue("@local_id", item.LocalId ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@operation_type", item.OperationType);
-            command.Parameters.AddWithValue("@error_code", errorCode);
-            command.Parameters.AddWithValue("@error", error);
-            command.Parameters.AddWithValue("@payload", item.Payload.GetRawText());
-            await command.ExecuteNonQueryAsync();
-        }
+        await ExecuteEventErrorAsync(connection, sql, item, errorCode, error);
         await AdvanceCursorAsync(connection, item.ServerEventId);
     }
 
@@ -153,6 +173,31 @@ public sealed class ReceiveSyncRepository
             """;
         await using var command = new MySqlCommand(sql, connection);
         command.Parameters.AddWithValue("@value", nextCursor);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task ExecuteEventErrorAsync(
+        string sql, PulledSyncEvent item, string errorCode, string error)
+    {
+        await using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        await ExecuteEventErrorAsync(connection, sql, item, errorCode, error);
+    }
+
+    private static async Task ExecuteEventErrorAsync(
+        MySqlConnection connection, string sql, PulledSyncEvent item,
+        string errorCode, string error)
+    {
+        await using var command = new MySqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@id", item.ServerEventId);
+        command.Parameters.AddWithValue("@event_uuid", item.EventUuid);
+        command.Parameters.AddWithValue("@entity_type", item.EntityType);
+        command.Parameters.AddWithValue("@entity_uuid", item.EntityUuid);
+        command.Parameters.AddWithValue("@local_id", item.LocalId ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@operation_type", item.OperationType);
+        command.Parameters.AddWithValue("@error_code", errorCode);
+        command.Parameters.AddWithValue("@error", error);
+        command.Parameters.AddWithValue("@payload", item.Payload.GetRawText());
         await command.ExecuteNonQueryAsync();
     }
 

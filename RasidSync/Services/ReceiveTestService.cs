@@ -3,7 +3,8 @@ using RasidSync.Models;
 namespace RasidSync.Services;
 
 /// <summary>
-/// ينزّل الحركات ويحفظها ثم يطبقها بالترتيب. يتوقف عند أول خطأ.
+/// ينزّل الحركات ويحفظها ثم يطبقها بالترتيب.
+/// خطأ فاتورة واحدة يعزل ويُستكمل ما بعدها، أما عطل الاتصال العام فيوقف الدورة.
 /// </summary>
 public sealed class ReceiveSyncService
 {
@@ -65,20 +66,27 @@ public sealed class ReceiveSyncService
             }
             catch (Exception ex)
             {
-                if (IsInvoiceNumberConflict(ex.Message))
+                string errorCode = SyncFailureClassifier.GetErrorCode(ex);
+                string errorMessage = SyncFailureClassifier.GetFullMessage(ex);
+
+                // إذا انقطع الاتصال أو قاعدة البيانات غير متاحة نتوقف؛ المشكلة عامة.
+                if (SyncFailureClassifier.IsInfrastructureFailure(ex))
                 {
-                    await repository.MarkBlockedAndAdvanceAsync(
-                        item,
-                        "INVOICE_NUMBER_CONFLICT",
-                        "تعارض رقم الفاتورة مع فاتورة محلية تحمل UUID مختلفًا. لم يتم تعديل أية بيانات.");
-                    cursor = item.ServerEventId;
-                    blocked++;
-                    continue;
+                    await repository.MarkFailedAsync(item, errorCode, errorMessage);
+                    throw new InvalidOperationException(
+                        $"توقفت دورة الاستقبال بسبب مشكلة اتصال أو قاعدة بيانات عند حركة السيرفر " +
+                        $"{item.ServerEventId}. سنعيد المحاولة لاحقًا: {errorMessage}", ex);
                 }
 
-                await repository.MarkFailedAsync(item.ServerEventId, ex.ToString());
-                throw new InvalidOperationException(
-                    $"فشل تطبيق حركة السيرفر {item.ServerEventId}. تم حفظ الخطأ وسنبدأ منها في المحاولة القادمة: {ex.Message}", ex);
+                // الخطأ خاص بهذه الفاتورة؛ نسجله ونتقدم حتى لا تتوقف بقية الفواتير.
+                if (errorCode == "INVOICE_NUMBER_CONFLICT")
+                    errorMessage = "تعارض رقم الفاتورة مع فاتورة محلية تحمل UUID مختلفًا. " +
+                                   "لم يتم تعديل أية بيانات." + Environment.NewLine + errorMessage;
+
+                await repository.MarkBlockedAndAdvanceAsync(item, errorCode, errorMessage);
+                cursor = item.ServerEventId;
+                blocked++;
+                continue;
             }
         }
 
@@ -90,8 +98,4 @@ public sealed class ReceiveSyncService
             ? $"لا توجد حركات جديدة. المؤشر الحالي {Math.Max(cursor, response.NextCursor)}."
             : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} فاتورة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
-
-    private static bool IsInvoiceNumberConflict(string message) =>
-        message.Contains("مستخدم لفاتورة أخرى", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("INVOICE_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase);
 }

@@ -125,7 +125,7 @@ public sealed class LocalSyncRepository
         await ExecuteStatusCommandAsync(sql, syncId, null);
     }
 
-    public async Task MarkFailedAsync(long syncId, string error)
+    public async Task MarkFailedAsync(SyncSendRow row, string errorCode, string error)
     {
         const string sql = """
             UPDATE tbl_sync_send
@@ -134,9 +134,28 @@ public sealed class LocalSyncRepository
                 last_attempt_at = NOW(),
                 last_error = @last_error
             WHERE sync_id = @sync_id;
+
+            INSERT INTO tbl_sync_errors
+            (
+                direction, related_id, event_uuid, entity_type, entity_uuid,
+                local_id, operation_type, error_code, error_message,
+                error_details, resolution_status, requires_support,
+                created_at, updated_at
+            )
+            SELECT
+                'Send', @sync_id, @event_uuid, @entity_type, @entity_uuid,
+                @local_id, @operation_type, @error_code, @last_error,
+                @payload, 0, 0, NOW(), NOW()
+            FROM DUAL
+            WHERE NOT EXISTS
+            (
+                SELECT 1 FROM tbl_sync_errors
+                WHERE direction='Send' AND related_id=@sync_id
+                  AND resolution_status IN (0, 3)
+            );
             """;
 
-        await ExecuteStatusCommandAsync(sql, syncId, error);
+        await ExecuteEventErrorCommandAsync(sql, row, errorCode, error);
     }
 
     /// <summary>
@@ -157,27 +176,20 @@ public sealed class LocalSyncRepository
                 error_details, resolution_status, requires_support,
                 created_at, updated_at
             )
-            VALUES
-            (
+            SELECT
                 'Send', @sync_id, @event_uuid, @entity_type, @entity_uuid,
                 @local_id, @operation_type, @error_code, @last_error,
                 @payload, 0, 0, NOW(), NOW()
+            FROM DUAL
+            WHERE NOT EXISTS
+            (
+                SELECT 1 FROM tbl_sync_errors
+                WHERE direction='Send' AND related_id=@sync_id
+                  AND resolution_status IN (0, 3)
             );
             """;
 
-        await using MySqlConnection connection = CreateConnection();
-        await connection.OpenAsync();
-        await using var command = new MySqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@sync_id", row.SyncId);
-        command.Parameters.AddWithValue("@event_uuid", row.EventUuid);
-        command.Parameters.AddWithValue("@entity_type", row.EntityType);
-        command.Parameters.AddWithValue("@entity_uuid", row.EntityUuid);
-        command.Parameters.AddWithValue("@local_id", row.LocalId ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@operation_type", row.OperationType);
-        command.Parameters.AddWithValue("@error_code", errorCode);
-        command.Parameters.AddWithValue("@last_error", error);
-        command.Parameters.AddWithValue("@payload", row.Payload);
-        await command.ExecuteNonQueryAsync();
+        await ExecuteEventErrorCommandAsync(sql, row, errorCode, error);
     }
 
     private async Task<long> GetStateLongAsync(string key)
@@ -205,6 +217,24 @@ public sealed class LocalSyncRepository
         await using var command = new MySqlCommand(sql, connection);
         command.Parameters.AddWithValue("@sync_id", syncId);
         command.Parameters.AddWithValue("@last_error", error ?? (object)DBNull.Value);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task ExecuteEventErrorCommandAsync(
+        string sql, SyncSendRow row, string errorCode, string error)
+    {
+        await using MySqlConnection connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@sync_id", row.SyncId);
+        command.Parameters.AddWithValue("@event_uuid", row.EventUuid);
+        command.Parameters.AddWithValue("@entity_type", row.EntityType);
+        command.Parameters.AddWithValue("@entity_uuid", row.EntityUuid);
+        command.Parameters.AddWithValue("@local_id", row.LocalId ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@operation_type", row.OperationType);
+        command.Parameters.AddWithValue("@error_code", errorCode);
+        command.Parameters.AddWithValue("@last_error", error);
+        command.Parameters.AddWithValue("@payload", row.Payload);
         await command.ExecuteNonQueryAsync();
     }
 

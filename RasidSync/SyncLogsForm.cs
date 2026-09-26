@@ -16,6 +16,7 @@ public sealed class SyncLogsForm : Form
     private readonly DateTimePicker _toDate = CreateDatePicker();
     private readonly Label _resultsLabel = new() { AutoSize = true };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly List<Control> _errorOnlyControls = [];
     private List<SyncLogRow> _sentRows = [];
     private List<SyncLogRow> _receivedRows = [];
     private List<SyncErrorRow> _errorRows = [];
@@ -47,7 +48,11 @@ public sealed class SyncLogsForm : Form
         _tabs.TabPages.Add(CreateLogPage("الحركات المرسلة", _sendGrid));
         _tabs.TabPages.Add(CreateLogPage("الحركات المستقبلة", _receiveGrid));
         _tabs.TabPages.Add(CreateErrorsPage());
-        _tabs.SelectedIndexChanged += (_, _) => ApplyFilter();
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            ApplyFilter();
+            UpdateErrorActionsVisibility();
+        };
         root.Controls.Add(_tabs, 0, 0);
         root.Controls.Add(BuildRightPanel(), 1, 0);
         Controls.Add(root);
@@ -57,6 +62,7 @@ public sealed class SyncLogsForm : Form
         _receiveGrid.SelectionChanged += (_, _) => UpdateDetails();
         _errorGrid.SelectionChanged += (_, _) => UpdateDetails();
 
+        UpdateErrorActionsVisibility();
         Shown += async (_, _) => await ReloadAsync();
     }
 
@@ -84,15 +90,29 @@ public sealed class SyncLogsForm : Form
         panel.Controls.Add(CreateButton("بحث", ReloadAsync));
         panel.Controls.Add(CreateButton("حركات اليوم", ShowTodayAsync, Color.FromArgb(45, 126, 96)));
         panel.Controls.Add(_resultsLabel);
-        panel.Controls.Add(CreateSeparator());
-        panel.Controls.Add(CreateSideLabel("معالجة الأخطاء"));
-        panel.Controls.Add(CreateButton("إعادة المحاولة", RetrySelectedAsync));
-        panel.Controls.Add(CreateButton("فتح التفاصيل", ShowDetailsAsync));
-        panel.Controls.Add(CreateButton("فتح الفاتورة المحلية", ShowLocalInvoiceAsync));
-        panel.Controls.Add(CreateButton("إلغاء الحركة", CancelSelectedAsync, Color.Firebrick));
-        panel.Controls.Add(CreateButton("اعتبارهما نفس الفاتورة - دعم", SupportMergeAsync, Color.DarkSlateBlue));
-        panel.Controls.Add(CreateButton("تصدير الخطأ", ExportSelectedAsync));
+        AddErrorOnlyControl(panel, CreateSeparator());
+        AddErrorOnlyControl(panel, CreateSideLabel("معالجة الأخطاء"));
+        AddErrorOnlyControl(panel, CreateButton("إعادة المحاولة", RetrySelectedAsync));
+        AddErrorOnlyControl(panel, CreateButton("فتح التفاصيل", ShowDetailsAsync));
+        AddErrorOnlyControl(panel, CreateButton("فتح الفاتورة المحلية", ShowLocalInvoiceAsync));
+        AddErrorOnlyControl(panel, CreateButton("إلغاء الحركة", CancelSelectedAsync, Color.Firebrick));
+        AddErrorOnlyControl(panel, CreateButton("اعتبارهما نفس الفاتورة - دعم", SupportMergeAsync, Color.DarkSlateBlue));
+        AddErrorOnlyControl(panel, CreateButton("تصدير الخطأ", ExportSelectedAsync));
         return panel;
+    }
+
+    private void AddErrorOnlyControl(Control parent, Control control)
+    {
+        _errorOnlyControls.Add(control);
+        parent.Controls.Add(control);
+    }
+
+    /// <summary>أزرار القرار الإداري تظهر فقط في تبويب الأخطاء.</summary>
+    private void UpdateErrorActionsVisibility()
+    {
+        bool show = _tabs.SelectedIndex == 2;
+        foreach (Control control in _errorOnlyControls)
+            control.Visible = show;
     }
 
     private static Label CreateSideLabel(string text) => new()
