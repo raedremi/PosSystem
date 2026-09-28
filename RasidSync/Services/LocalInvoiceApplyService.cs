@@ -513,6 +513,18 @@ public sealed class LocalInvoiceApplyService
         {
             if (!property.CanWrite || !TryProperty(json, map(property.Name), out JsonElement value) ||
                 value.ValueKind == JsonValueKind.Null) continue;
+            // فواتير المخزون لا تنشئ سندًا؛ رصيد قد يرسل طريقة الدفع كنص فارغ.
+            if (property.Name == nameof(InvoiceResyncHeader.p_inv_type_pay) &&
+                value.ValueKind == JsonValueKind.String &&
+                string.IsNullOrWhiteSpace(value.GetString()) &&
+                TryProperty(json, "inv_set_idinvo", out JsonElement invoiceTypeJson) &&
+                invoiceTypeJson.TryGetInt32(out int invoiceType) &&
+                invoiceType > 0 && invoiceType is not (102 or 103 or 202 or 203))
+            {
+                property.SetValue(target, 1);
+                continue;
+            }
+
             Type type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
             object? converted = type == typeof(string)
                 ? (value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString())
