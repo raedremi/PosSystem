@@ -88,7 +88,7 @@ public sealed class LocalInvoiceApplyService
                 connection, transaction, invoiceId, header, package.Model.Details);
 
             // إعادة الحساب الكامل تجعل تكرار المحاولة آمناً مع MyISAM.
-            await RecalculateStocksAsync(connection, transaction, affected);
+            await RecalculateStocksAsync(connection, transaction, affected, header.p_inv_set_idinvo);
 
             await LocalInvoiceJournalService.CreateAsync(
                 connection, transaction, CreateJournalData(header, invNum));
@@ -153,7 +153,7 @@ public sealed class LocalInvoiceApplyService
                 "DELETE FROM tbl_invoice WHERE inv_id=@InvoiceId AND inv_uuid=@uuid;",
                 new { existing.InvoiceId, uuid }, transaction);
 
-            await RecalculateStocksAsync(connection, transaction, affected);
+            await RecalculateStocksAsync(connection, transaction, affected, existing.InvoiceType);
             await transaction.CommitAsync();
 
             return new InvoiceApplyResult
@@ -303,12 +303,16 @@ public sealed class LocalInvoiceApplyService
     }
 
     private static async Task RecalculateStocksAsync(
-        IDbConnection conn, IDbTransaction tran, IEnumerable<AffectedStock> stocks)
+        IDbConnection conn, IDbTransaction tran, IEnumerable<AffectedStock> stocks, int invoiceType)
     {
         foreach (AffectedStock stock in stocks.DistinctBy(x => new { x.ItemId, x.StoreId }))
         {
-            await conn.ExecuteAsync("CALL RecalculateItemCost(@ItemId);", new { stock.ItemId }, tran);
-            await conn.ExecuteAsync("CALL RecalculateItemProfit(@ItemId);", new { stock.ItemId }, tran);
+            // المناقلة تغير كمية المستودعين فقط، من دون إعادة حساب التكلفة أو الربح.
+            if (invoiceType != 501)
+            {
+                await conn.ExecuteAsync("CALL RecalculateItemCost(@ItemId);", new { stock.ItemId }, tran);
+                await conn.ExecuteAsync("CALL RecalculateItemProfit(@ItemId);", new { stock.ItemId }, tran);
+            }
             await conn.ExecuteAsync(
                 "CALL UpdateItemStoreStock(@ItemId,@StoreId);",
                 new { stock.ItemId, stock.StoreId }, tran);
