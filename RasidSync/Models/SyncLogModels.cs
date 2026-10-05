@@ -4,6 +4,9 @@ public sealed class SyncLogRow
 {
     public long Id { get; set; }
     public string EntityType { get; set; } = string.Empty;
+    public string DocumentName { get; set; } = string.Empty;
+    public string SourceDeviceUuid { get; set; } = string.Empty;
+    public string? Payload { get; set; }
     public string EntityUuid { get; set; } = string.Empty;
     public long? LocalId { get; set; }
     public int OperationType { get; set; }
@@ -19,6 +22,9 @@ public sealed class SyncErrorRow
     public string Direction { get; set; } = string.Empty;
     public long RelatedId { get; set; }
     public string EntityType { get; set; } = string.Empty;
+    public string DocumentName { get; set; } = string.Empty;
+    public string SourceDeviceUuid { get; set; } = string.Empty;
+    public string? Payload { get; set; }
     public string EntityUuid { get; set; } = string.Empty;
     public long? LocalId { get; set; }
     public int OperationType { get; set; }
@@ -28,3 +34,4 @@ public sealed class SyncErrorRow
     public int ResolutionStatus { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+

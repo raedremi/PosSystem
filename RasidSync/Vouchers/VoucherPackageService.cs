@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MySqlConnector;
 using RasidSync.Models;
+using RasidSync.Services;
 
 namespace RasidSync.Vouchers;
 
@@ -57,7 +58,8 @@ public sealed class VoucherPackageService
                 ("@branch", header["entry_b_id"]), ("@saveBranch", header["entry_save_b_id"]));
         }
 
-        string payload = JsonSerializer.Serialize(new { Header = header, Details = details }, JsonOptions);
+        var metadata = await SyncDocumentDisplay.ReadMetadataAsync(connection, true, header["entry_gl_id"]!, header["entry_gl_number"]!, type);
+        string payload = JsonSerializer.Serialize(new { Header = header, Details = details, Metadata = metadata }, JsonOptions);
         if (operationType != 3)
         {
             using JsonDocument document = JsonDocument.Parse(payload);
@@ -183,3 +185,4 @@ public sealed class VoucherPackageService
 
 
 public sealed record VoucherQueueResult(long SyncId, long EntryId, string VoucherUuid, int DetailCount);
+

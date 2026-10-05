@@ -15,6 +15,7 @@ public sealed class SyncLogRepository
     public Task<List<SyncLogRow>> GetSendRowsAsync(DateTime from, DateTime toExclusive) => ReadLogsAsync("""
         SELECT sync_id Id, entity_type EntityType, entity_uuid EntityUuid,
                local_id LocalId, operation_type OperationType,
+               source_device_uuid SourceDeviceUuid, payload Payload,
                sync_status Status, retry_count RetryCount,
                created_at CreatedAt, last_error Error
         FROM tbl_sync_send
@@ -25,6 +26,7 @@ public sealed class SyncLogRepository
     public Task<List<SyncLogRow>> GetReceiveRowsAsync(DateTime from, DateTime toExclusive) => ReadLogsAsync("""
         SELECT server_event_id Id, entity_type EntityType, entity_uuid EntityUuid,
                NULL LocalId, operation_type OperationType,
+               source_device_uuid SourceDeviceUuid, payload Payload,
                apply_status Status, retry_count RetryCount,
                received_at CreatedAt, last_error Error
         FROM tbl_sync_receive
@@ -35,18 +37,25 @@ public sealed class SyncLogRepository
     public async Task<List<SyncErrorRow>> GetErrorsAsync(DateTime from, DateTime toExclusive)
     {
         const string sql = """
-            SELECT error_id ErrorId, direction Direction, related_id RelatedId,
-                   entity_type EntityType, entity_uuid EntityUuid, local_id LocalId,
-                   operation_type OperationType, error_code ErrorCode,
-                   error_message ErrorMessage, error_details ErrorDetails,
-                   resolution_status ResolutionStatus, created_at CreatedAt
-            FROM tbl_sync_errors
-            WHERE created_at >= @from AND created_at < @to
-            ORDER BY error_id DESC LIMIT 2000;
+            SELECT e.error_id ErrorId, e.direction Direction, e.related_id RelatedId,
+                   e.entity_type EntityType, e.entity_uuid EntityUuid, e.local_id LocalId,
+                   e.operation_type OperationType, e.error_code ErrorCode,
+                   e.error_message ErrorMessage, e.error_details ErrorDetails,
+                   e.resolution_status ResolutionStatus, e.created_at CreatedAt,
+                   COALESCE(s.source_device_uuid, r.source_device_uuid, '') SourceDeviceUuid,
+                   COALESCE(s.payload, r.payload, e.error_details) Payload
+            FROM tbl_sync_errors e
+            LEFT JOIN tbl_sync_send s ON e.direction='Send' AND s.sync_id=e.related_id
+            LEFT JOIN tbl_sync_receive r ON e.direction='Receive' AND r.server_event_id=e.related_id
+            WHERE e.created_at >= @from AND e.created_at < @to
+            ORDER BY e.error_id DESC LIMIT 2000;
             """;
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
-        return (await connection.QueryAsync<SyncErrorRow>(sql, new { from, to = toExclusive })).ToList();
+        var rows = (await connection.QueryAsync<SyncErrorRow>(sql, new { from, to = toExclusive })).ToList();
+        foreach (var row in rows)
+            row.DocumentName = SyncDocumentDisplay.Title(row.Payload, row.EntityType, row.EntityUuid);
+        return rows;
     }
 
     public async Task RetryAsync(SyncErrorRow error)
@@ -112,7 +121,10 @@ public sealed class SyncLogRepository
     {
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
-        return (await connection.QueryAsync<SyncLogRow>(sql, new { from, to = toExclusive })).ToList();
+        var rows = (await connection.QueryAsync<SyncLogRow>(sql, new { from, to = toExclusive })).ToList();
+        foreach (var row in rows)
+            row.DocumentName = SyncDocumentDisplay.Title(row.Payload, row.EntityType, row.EntityUuid);
+        return rows;
     }
 
     private async Task ExecuteAsync(string sql, SyncErrorRow error)
@@ -136,3 +148,4 @@ public sealed class SyncLogRepository
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+

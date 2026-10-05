@@ -11,7 +11,7 @@ public sealed class SyncLogsForm : Form
     private readonly DataGridView _sendGrid = CreateGrid();
     private readonly DataGridView _receiveGrid = CreateGrid();
     private readonly DataGridView _errorGrid = CreateGrid();
-    private readonly TextBox _searchBox = new() { PlaceholderText = "رقم الحركة، UUID أو الخطأ", Width = 190 };
+    private readonly TextBox _searchBox = new() { PlaceholderText = "اسم المستند، الجهاز أو الخطأ", Width = 190 };
     private readonly DateTimePicker _fromDate = CreateDatePicker();
     private readonly DateTimePicker _toDate = CreateDatePicker();
     private readonly Label _resultsLabel = new() { AutoSize = true };
@@ -221,24 +221,28 @@ public sealed class SyncLogsForm : Form
         foreach (DataGridView grid in new[] { _sendGrid, _receiveGrid })
         {
             AddColumn(grid, nameof(SyncLogRow.Id), "رقم الحركة", 105);
+            AddColumn(grid, nameof(SyncLogRow.DocumentName), "اسم المستند ورقمه", 270);
+            AddColumn(grid, nameof(SyncLogRow.SourceDeviceUuid), "UUID الجهاز المرسل", 285);
             AddColumn(grid, nameof(SyncLogRow.EntityType), "النوع", 100);
             AddColumn(grid, nameof(SyncLogRow.LocalId), "ID المحلي", 105);
             AddColumn(grid, nameof(SyncLogRow.OperationType), "العملية", 95);
             AddColumn(grid, nameof(SyncLogRow.Status), "الحالة", 105);
             AddColumn(grid, nameof(SyncLogRow.RetryCount), "المحاولات", 100);
             AddColumn(grid, nameof(SyncLogRow.CreatedAt), "الوقت", 170);
-            AddColumn(grid, nameof(SyncLogRow.EntityUuid), "UUID الفاتورة", 280);
+            AddColumn(grid, nameof(SyncLogRow.EntityUuid), "UUID المستند", 280);
             AddColumn(grid, nameof(SyncLogRow.Error), "سبب الخطأ", 340, true);
         }
         AddColumn(_errorGrid, nameof(SyncErrorRow.ErrorId), "رقم الخطأ", 105);
         AddColumn(_errorGrid, nameof(SyncErrorRow.Direction), "الاتجاه", 95);
         AddColumn(_errorGrid, nameof(SyncErrorRow.RelatedId), "رقم الحركة", 105);
+        AddColumn(_errorGrid, nameof(SyncErrorRow.DocumentName), "اسم المستند ورقمه", 270);
+        AddColumn(_errorGrid, nameof(SyncErrorRow.SourceDeviceUuid), "UUID الجهاز المرسل", 285);
         AddColumn(_errorGrid, nameof(SyncErrorRow.LocalId), "ID المحلي", 105);
         AddColumn(_errorGrid, nameof(SyncErrorRow.OperationType), "العملية", 95);
         AddColumn(_errorGrid, nameof(SyncErrorRow.ErrorCode), "تصنيف الخطأ", 190);
         AddColumn(_errorGrid, nameof(SyncErrorRow.ResolutionStatus), "الحالة", 105);
         AddColumn(_errorGrid, nameof(SyncErrorRow.CreatedAt), "الوقت", 170);
-        AddColumn(_errorGrid, nameof(SyncErrorRow.EntityUuid), "UUID الفاتورة", 280);
+        AddColumn(_errorGrid, nameof(SyncErrorRow.EntityUuid), "UUID المستند", 280);
         AddColumn(_errorGrid, nameof(SyncErrorRow.ErrorMessage), "سبب الخطأ", 360, true);
 
         foreach (DataGridView grid in new[] { _sendGrid, _receiveGrid, _errorGrid })
@@ -327,12 +331,12 @@ public sealed class SyncLogsForm : Form
         bool Match(string? value) => value?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
 
         _sendGrid.DataSource = _sentRows.Where(x => search.Length == 0 || Match(x.Id.ToString()) ||
-            Match(x.LocalId?.ToString()) || Match(x.EntityUuid) || Match(x.EntityType) || Match(x.Error)).ToList();
+            Match(x.LocalId?.ToString()) || Match(x.EntityUuid) || Match(x.EntityType) || Match(x.DocumentName) || Match(x.SourceDeviceUuid) || Match(x.Error)).ToList();
         _receiveGrid.DataSource = _receivedRows.Where(x => search.Length == 0 || Match(x.Id.ToString()) ||
-            Match(x.EntityUuid) || Match(x.EntityType) || Match(x.Error)).ToList();
+            Match(x.EntityUuid) || Match(x.EntityType) || Match(x.DocumentName) || Match(x.SourceDeviceUuid) || Match(x.Error)).ToList();
         _errorGrid.DataSource = _errorRows.Where(x => search.Length == 0 || Match(x.ErrorId.ToString()) ||
             Match(x.RelatedId.ToString()) || Match(x.LocalId?.ToString()) || Match(x.EntityUuid) ||
-            Match(x.ErrorCode) || Match(x.ErrorMessage)).ToList();
+            Match(x.DocumentName) || Match(x.SourceDeviceUuid) || Match(x.ErrorCode) || Match(x.ErrorMessage)).ToList();
 
         _resultsLabel.Text = $"النتائج: {_tabs.SelectedIndex switch { 0 => _sendGrid.RowCount, 1 => _receiveGrid.RowCount, _ => _errorGrid.RowCount }}";
         UpdateDetails();
@@ -350,21 +354,23 @@ public sealed class SyncLogsForm : Form
 
         if (selected is SyncErrorRow error)
         {
-            boxes.Item1.Text = $"رقم الخطأ: {error.ErrorId}\r\nالاتجاه: {error.Direction}\r\n" +
-                $"رقم الحركة: {error.RelatedId}\r\nID الفاتورة المحلي: {error.LocalId?.ToString() ?? "غير متوفر"}\r\n" +
-                $"UUID الفاتورة المرسلة: {error.EntityUuid}\r\nالعملية: {OperationName(error.OperationType)}\r\n" +
+            boxes.Item1.Text = $"المستند: {error.DocumentName}\r\nالجهاز المرسل: {error.SourceDeviceUuid}\r\n" +
+                $"رقم الخطأ: {error.ErrorId}\r\nالاتجاه: {error.Direction}\r\n" +
+                $"رقم الحركة: {error.RelatedId}\r\nID المستند المحلي: {error.LocalId?.ToString() ?? "غير متوفر"}\r\n" +
+                $"UUID المستند المرسل: {error.EntityUuid}\r\nالعملية: {OperationName(error.OperationType)}\r\n" +
                 $"تصنيف الخطأ: {error.ErrorCode}\r\nوقت الخطأ: {error.CreatedAt:yyyy-MM-dd HH:mm:ss}\r\n\r\n" +
                 $"سبب الخطأ كاملًا:\r\n{error.ErrorMessage}";
             boxes.Item2.Text = FormatJson(error.ErrorDetails);
         }
         else if (selected is SyncLogRow row)
         {
-            boxes.Item1.Text = $"رقم الحركة: {row.Id}\r\nID الفاتورة المحلي: {row.LocalId?.ToString() ?? "غير متوفر"}\r\n" +
-                $"UUID الفاتورة: {row.EntityUuid}\r\nالنوع: {row.EntityType}\r\n" +
+            boxes.Item1.Text = $"المستند: {row.DocumentName}\r\nالجهاز المرسل: {row.SourceDeviceUuid}\r\n" +
+                $"رقم الحركة: {row.Id}\r\nID المستند المحلي: {row.LocalId?.ToString() ?? "غير متوفر"}\r\n" +
+                $"UUID المستند: {row.EntityUuid}\r\nالنوع: {row.EntityType}\r\n" +
                 $"العملية: {OperationName(row.OperationType)}\r\nالمحاولات: {row.RetryCount}\r\n" +
                 $"وقت الحركة: {row.CreatedAt:yyyy-MM-dd HH:mm:ss}\r\n\r\n" +
                 $"سبب الخطأ كاملًا:\r\n{row.Error ?? "لا يوجد خطأ."}";
-            boxes.Item2.Text = "تفاصيل JSON متاحة في صفحة الأخطاء للحركات المسجلة فيها.";
+            boxes.Item2.Text = FormatJson(row.Payload);
         }
         else boxes.Item1.Text = boxes.Item2.Text = "اختر حركة من الجدول لعرض التفاصيل.";
     }
@@ -462,3 +468,4 @@ public sealed class SyncLogsForm : Form
         return dialog.ShowDialog() == DialogResult.OK ? box.Text : null;
     }
 }
+

@@ -77,12 +77,14 @@ public sealed class InvoicePackageService
             """,
             ("@invoice_uuid", invoiceUuid));
 
-        var package = new InvoiceSyncPackage
+        var metadata = await SyncDocumentDisplay.ReadMetadataAsync(connection, false, invoiceSetId, invoiceNumber, header["inv_set_idinvo"]);
+        var package = new
         {
             Header = header,
             Details = details,
             Payments = payments,
-            Due = due
+            Due = due,
+            Metadata = metadata
         };
 
         string payload = JsonSerializer.Serialize(package, JsonOptions);
@@ -216,3 +218,4 @@ public sealed class InvoicePackageService
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+
