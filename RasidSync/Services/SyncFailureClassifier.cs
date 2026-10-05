@@ -37,6 +37,13 @@ public static class SyncFailureClassifier
     {
         string message = GetFullMessage(exception);
 
+        if (message.Contains("VOUCHER_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase))
+            return "VOUCHER_NUMBER_CONFLICT";
+        if (message.Contains("INVALID_VOUCHER_PAYLOAD", StringComparison.OrdinalIgnoreCase))
+            return "INVALID_VOUCHER_PAYLOAD";
+        if (message.Contains("VOUCHER_APPLY_ERROR", StringComparison.OrdinalIgnoreCase))
+            return "VOUCHER_APPLY_ERROR";
+
         if (message.Contains("مستخدم لفاتورة أخرى", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("INVOICE_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase))
             return "INVOICE_NUMBER_CONFLICT";
@@ -75,3 +82,4 @@ public static class SyncFailureClassifier
         1049 or    // Unknown database
         2002 or 2003 or 2006 or 2013;
 }
+

@@ -1,3 +1,4 @@
+using RasidSync.Vouchers;
 using RasidSync.Models;
 
 namespace RasidSync.Services;
@@ -16,6 +17,7 @@ public sealed class ReceiveSyncService
         var repository = new ReceiveSyncRepository(settings);
         var apiClient = new PullApiClient(settings);
         var invoiceService = new LocalInvoiceApplyService(settings);
+        var voucherService = new LocalVoucherApplyService(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();
 
         long cursor = await repository.GetLastReceivedIdAsync();
@@ -55,6 +57,11 @@ public sealed class ReceiveSyncService
                     await invoiceService.ApplyAsync(item);
                     applied++;
                 }
+                else if (string.Equals(item.EntityType, "Voucher", StringComparison.OrdinalIgnoreCase))
+                {
+                    await voucherService.ApplyAsync(item);
+                    applied++;
+                }
                 else
                 {
                     // الحركات التجريبية أو الأنواع التي سنضيفها لاحقًا لا توقف طابور الفواتير.
@@ -83,6 +90,10 @@ public sealed class ReceiveSyncService
                     errorMessage = "تعارض رقم الفاتورة مع فاتورة محلية تحمل UUID مختلفًا. " +
                                    "لم يتم تعديل أية بيانات." + Environment.NewLine + errorMessage;
 
+                if (errorCode == "VOUCHER_NUMBER_CONFLICT")
+                    errorMessage = "تعارض رقم السند مع سند أو قيود أخرى. لم يتم تعديل البيانات." +
+                                   Environment.NewLine + errorMessage;
+
                 await repository.MarkBlockedAndAdvanceAsync(item, errorCode, errorMessage);
                 cursor = item.ServerEventId;
                 blocked++;
@@ -96,6 +107,7 @@ public sealed class ReceiveSyncService
 
         return response.Events.Count == 0
             ? $"لا توجد حركات جديدة. المؤشر الحالي {Math.Max(cursor, response.NextCursor)}."
-            : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} فاتورة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
+            : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} حركة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
+

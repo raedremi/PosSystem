@@ -74,6 +74,10 @@ public sealed class PendingSyncService
 
     private static string CleanServerError(string message, string errorCode)
     {
+        if (errorCode == "VOUCHER_NUMBER_CONFLICT")
+            return "تعارض رقم السند: الرقم مستخدم لسند أو قيود أخرى. لم يتم تعديل البيانات." +
+                   Environment.NewLine + message;
+
         if (errorCode != "INVOICE_NUMBER_CONFLICT")
             return message;
 
@@ -84,3 +88,4 @@ public sealed class PendingSyncService
             : prefix;
     }
 }
+

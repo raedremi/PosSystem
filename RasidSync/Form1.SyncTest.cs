@@ -1,3 +1,4 @@
+using RasidSync.Vouchers;
 using RasidSync.Models;
 using RasidSync.Services;
 
@@ -8,6 +9,7 @@ public partial class Form1
     private Button _sendPendingEventsButton = null!;
     private Button _receiveEventsButton = null!;
     private Button _queueInvoiceButton = null!;
+    private Button _queueVoucherButton = null!;
     private Button _syncLogsButton = null!;
 
     /// <summary>
@@ -75,6 +77,10 @@ public partial class Form1
             "تجهيز JSON فاتورة",
             Color.FromArgb(45, 126, 96));
 
+        _queueVoucherButton = CreateSyncActionButton(
+            "تجهيز JSON سند",
+            Color.FromArgb(45, 126, 96));
+
         _syncLogsButton = CreateSyncActionButton(
             "سجلات المزامنة",
             Color.FromArgb(43, 108, 138));
@@ -82,12 +88,14 @@ public partial class Form1
         _sendPendingEventsButton.Click += async (_, _) => await SendPendingEventsAsync();
         _receiveEventsButton.Click += async (_, _) => await ReceiveEventsAsync();
         _queueInvoiceButton.Click += async (_, _) => await QueueInvoiceAsync();
+        _queueVoucherButton.Click += async (_, _) => await QueueVoucherAsync();
         _syncLogsButton.Click += async (_, _) => await OpenSyncLogsAsync();
 
         // الأزرار مرتبة عموديًا داخل لوحة الأوامر اليمنى.
         _actionsPanel.Controls.Add(_sendPendingEventsButton);
         _actionsPanel.Controls.Add(_receiveEventsButton);
         _actionsPanel.Controls.Add(_queueInvoiceButton);
+        _actionsPanel.Controls.Add(_queueVoucherButton);
         _actionsPanel.Controls.Add(_syncLogsButton);
     }
 
@@ -339,6 +347,177 @@ public partial class Form1
         var acceptButton = new Button
         {
             Text = "تجهيز الفاتورة",
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(45, 126, 96),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Width = 140,
+            Height = 38,
+            Location = new Point(188, 115)
+        };
+        acceptButton.FlatAppearance.BorderSize = 0;
+
+        var cancelButton = new Button
+        {
+            Text = "إلغاء",
+            DialogResult = DialogResult.Cancel,
+            Width = 110,
+            Height = 38,
+            Location = new Point(68, 115)
+        };
+
+        dialog.Controls.Add(title);
+        dialog.Controls.Add(invoiceNumber);
+        dialog.Controls.Add(acceptButton);
+        dialog.Controls.Add(cancelButton);
+        dialog.AcceptButton = acceptButton;
+        dialog.CancelButton = cancelButton;
+
+        return dialog.ShowDialog(this) == DialogResult.OK
+            ? decimal.ToInt64(invoiceNumber.Value)
+            : null;
+    }
+    private async Task QueueVoucherAsync()
+    {
+        if (_syncOperationRunning)
+        {
+            SetStatus("توجد عملية مزامنة تعمل الآن. انتظر حتى تنتهي.", false);
+            return;
+        }
+        long? entryId = ShowVoucherIdDialog();
+        if (entryId is null) return;
+        int? operationType = ShowVoucherOperationDialog();
+        if (operationType is null) return;
+
+        _syncOperationRunning = true;
+        SetBusy(_queueVoucherButton, true, "جارٍ تجهيز JSON...");
+        try
+        {
+            SyncSettings settings = ReadSettings();
+            await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+            var service = new VoucherPackageService(settings);
+            VoucherQueueResult result = await service.BuildAndQueueAsync(entryId.Value, operationType.Value);
+            SetStatus($"تم تجهيز السند ID={result.EntryId} في الحركة {result.SyncId}: " +
+                      $"{result.DetailCount} قيد. UUID={result.VoucherUuid}", true);
+        }
+        catch (Exception ex) { SetStatus(ex.Message, false); }
+        finally
+        {
+            _syncOperationRunning = false;
+            SetBusy(_queueVoucherButton, false, "تجهيز JSON سند");
+        }
+    }
+    private int? ShowVoucherOperationDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "نوع مزامنة السند",
+            Size = new Size(430, 245),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            RightToLeft = RightToLeft.Yes,
+            RightToLeftLayout = true,
+            BackColor = Color.White,
+            Font = new Font("Arial", 10F)
+        };
+
+        var title = new Label
+        {
+            Text = "اختر العملية التي ستُسجل لهذا السند",
+            Dock = DockStyle.Top,
+            Height = 55,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Arial", 11F, FontStyle.Bold)
+        };
+
+        var operation = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 320,
+            Location = new Point(48, 70),
+            Font = new Font("Arial", 11F)
+        };
+        operation.Items.Add(new SyncOperationChoice(1, "إضافة سند جديد (1)"));
+        operation.Items.Add(new SyncOperationChoice(2, "تعديل سند موجود (2)"));
+        operation.Items.Add(new SyncOperationChoice(3, "حذف سند (3)"));
+        operation.Items.Add(new SyncOperationChoice(4, "استبدال كامل / إعادة إرسال (4)"));
+        operation.SelectedIndex = 0;
+
+        var acceptButton = new Button
+        {
+            Text = "متابعة",
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(45, 126, 96),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Width = 135,
+            Height = 38,
+            Location = new Point(220, 135)
+        };
+        acceptButton.FlatAppearance.BorderSize = 0;
+
+        var cancelButton = new Button
+        {
+            Text = "إلغاء",
+            DialogResult = DialogResult.Cancel,
+            Width = 110,
+            Height = 38,
+            Location = new Point(90, 135)
+        };
+
+        dialog.Controls.Add(title);
+        dialog.Controls.Add(operation);
+        dialog.Controls.Add(acceptButton);
+        dialog.Controls.Add(cancelButton);
+        dialog.AcceptButton = acceptButton;
+        dialog.CancelButton = cancelButton;
+
+        return dialog.ShowDialog(this) == DialogResult.OK
+            ? ((SyncOperationChoice)operation.SelectedItem!).Value
+            : null;
+    }
+
+    private long? ShowVoucherIdDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "اختيار سند",
+            Size = new Size(390, 210),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            RightToLeft = RightToLeft.Yes,
+            RightToLeftLayout = true,
+            BackColor = Color.White,
+            Font = new Font("Arial", 10F)
+        };
+
+        var title = new Label
+        {
+            Text = "أدخل رقم ID الداخلي للسند (entry_id)",
+            Dock = DockStyle.Top,
+            Height = 55,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Arial", 11F, FontStyle.Bold)
+        };
+
+        var invoiceNumber = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = long.MaxValue,
+            Width = 280,
+            Height = 36,
+            Font = new Font("Arial", 12F),
+            TextAlign = HorizontalAlignment.Center,
+            Location = new Point(48, 65)
+        };
+
+        var acceptButton = new Button
+        {
+            Text = "تجهيز السند",
             DialogResult = DialogResult.OK,
             BackColor = Color.FromArgb(45, 126, 96),
             ForeColor = Color.White,
