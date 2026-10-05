@@ -37,8 +37,8 @@ public sealed class VoucherPackageService
         if (!Guid.TryParse(voucherUuid, out _))
             throw new InvalidOperationException("السند لا يحتوي على gl_uuid صحيح.");
         int type = Convert.ToInt32(header["entry_type"]);
-        if (type is not (901 or 902))
-            throw new InvalidOperationException("هذه المرحلة تدعم القبض 901 والدفع 902 فقط.");
+        if (type is not (901 or 902 or 903 or 904))
+            throw new InvalidOperationException("الأنواع المدعومة: قبض 901، دفع 902، قيد 903، وقيد افتتاحي 904.");
 
         List<Dictionary<string, object?>> details = [];
         if (operationType != 3)

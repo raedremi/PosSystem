@@ -60,7 +60,7 @@ internal static class VoucherApplyEngine
             if (operationType == 3)
             {
                 if (old == null) return "السند محذوف مسبقًا؛ اعتبرت الحركة ناجحة.";
-                if (old.Type is not (901 or 902))
+                if (old.Type is not (901 or 902 or 903 or 904))
                     throw Invalid("حذف هذا النوع من السندات غير مدعوم حاليًا.");
                 await EnsureIdentityAvailableAsync(connection, old, old.EntryId);
                 // التفاصيل أولًا حتى يبقى الرأس مرجعًا لإعادة المحاولة عند فشل الحذف.
@@ -75,7 +75,7 @@ internal static class VoucherApplyEngine
             await EnsureIdentityAvailableAsync(connection, data.Identity, old?.EntryId);
             if (old != null)
             {
-                if (old.Type is not (901 or 902))
+                if (old.Type is not (901 or 902 or 903 or 904))
                     throw Invalid("UUID يعود إلى نوع سند آخر غير مدعوم.");
                 await EnsureIdentityAvailableAsync(connection, old, old.EntryId);
             }
@@ -211,7 +211,7 @@ internal static class VoucherApplyEngine
             SetId = Integer(header, "entry_gl_id"),
             Type = Integer(header, "entry_type")
         };
-        if (identity.Type is not (901 or 902) || identity.Number <= 0 ||
+        if (identity.Type is not (901 or 902 or 903 or 904) || identity.Number <= 0 ||
             identity.SetId <= 0 || identity.SetId > int.MaxValue ||
             identity.GeneralNumber <= 0 || identity.Number == long.MaxValue || identity.GeneralNumber == long.MaxValue)
             throw Invalid("نوع السند أو رقمه أو إعداده أو رقمه العام غير صحيح.");
@@ -229,7 +229,7 @@ internal static class VoucherApplyEngine
                 Integer(row, "gl_savein_b_id") != Integer(header, "entry_save_b_id"))
                 throw Invalid("يوجد قيد لا يطابق رقم السند أو نوعه أو إعداداته أو بيانات فرعه.");
             decimal d = Amount(row, "gl_debit"), c = Amount(row, "gl_credit");
-            if (Integer(row, "gl_ac_id") <= 0 || d < 0 || c < 0 || (d > 0 && c > 0))
+            if (Integer(row, "gl_ac_id") <= 0 || d < 0 || c < 0 || (d > 0 && c > 0 && identity.Type is (901 or 902)))
                 throw Invalid("يوجد حساب أو مبلغ غير صحيح في قيود السند.");
             debit += d;
             credit += c;
