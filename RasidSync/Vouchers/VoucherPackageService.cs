@@ -19,7 +19,7 @@ public sealed class VoucherPackageService
         _settings = settings;
     }
 
-    public async Task<VoucherQueueResult> BuildAndQueueAsync(long entryId, int operationType)
+    public async Task<VoucherQueueResult> BuildAndQueueAsync(long entryId, int operationType, string? expectedUuid = null)
     {
         // العمليات المدعومة: إضافة، تعديل، حذف، واستبدال كامل.
         if (operationType is not (1 or 2 or 3 or 4))
@@ -35,6 +35,8 @@ public sealed class VoucherPackageService
             throw new InvalidOperationException($"لم يتم العثور على سند ID={entryId}.");
 
         string voucherUuid = Convert.ToString(header["gl_uuid"])?.Trim() ?? string.Empty;
+        if (expectedUuid is not null && !string.Equals(voucherUuid, expectedUuid.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("تغيرت هوية المستند المحلي؛ لم تسجل حركة إعادة المزامنة.");
         if (!Guid.TryParse(voucherUuid, out _))
             throw new InvalidOperationException("السند لا يحتوي على gl_uuid صحيح.");
         int type = Convert.ToInt32(header["entry_type"]);
@@ -185,4 +187,5 @@ public sealed class VoucherPackageService
 
 
 public sealed record VoucherQueueResult(long SyncId, long EntryId, string VoucherUuid, int DetailCount);
+
 

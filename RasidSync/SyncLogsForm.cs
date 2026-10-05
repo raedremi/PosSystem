@@ -17,6 +17,8 @@ public sealed class SyncLogsForm : Form
     private readonly Label _resultsLabel = new() { AutoSize = true };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
     private readonly List<Control> _errorOnlyControls = [];
+    private Button _resyncButton = null!;
+    private bool _isRequeueing;
     private List<SyncLogRow> _sentRows = [];
     private List<SyncLogRow> _receivedRows = [];
     private List<SyncErrorRow> _errorRows = [];
@@ -90,6 +92,8 @@ public sealed class SyncLogsForm : Form
         panel.Controls.Add(CreateButton("بحث", ReloadAsync));
         panel.Controls.Add(CreateButton("حركات اليوم", ShowTodayAsync, Color.FromArgb(45, 126, 96)));
         panel.Controls.Add(_resultsLabel);
+        _resyncButton = CreateButton("إعادة مزامنة المستند", RequeueSelectedAsync, Color.FromArgb(45, 126, 96));
+        panel.Controls.Add(_resyncButton);
         AddErrorOnlyControl(panel, CreateSeparator());
         AddErrorOnlyControl(panel, CreateSideLabel("معالجة الأخطاء"));
         AddErrorOnlyControl(panel, CreateButton("إعادة المحاولة", RetrySelectedAsync));
@@ -113,6 +117,7 @@ public sealed class SyncLogsForm : Form
         bool show = _tabs.SelectedIndex == 2;
         foreach (Control control in _errorOnlyControls)
             control.Visible = show;
+        UpdateResyncButton();
     }
 
     private static Label CreateSideLabel(string text) => new()
@@ -344,6 +349,7 @@ public sealed class SyncLogsForm : Form
 
     private void UpdateDetails()
     {
+        UpdateResyncButton();
         if (_tabs.SelectedTab?.Tag is not ValueTuple<TextBox, TextBox> boxes) return;
         object? selected = _tabs.SelectedIndex switch
         {
@@ -384,6 +390,46 @@ public sealed class SyncLogsForm : Form
             return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
         }
         catch (JsonException) { return value; }
+    }
+
+    private void UpdateResyncButton()
+    {
+        if (_resyncButton is null) return;
+        _resyncButton.Visible = _tabs.SelectedIndex == 0;
+        var row = _sendGrid.CurrentRow?.DataBoundItem as SyncLogRow;
+        _resyncButton.Enabled = !_isRequeueing && _tabs.SelectedIndex == 0 && row is not null
+            && row.Status == 2 && row.OperationType != 3
+            && (row.EntityType.Equals("Invoice", StringComparison.OrdinalIgnoreCase)
+                || row.EntityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task RequeueSelectedAsync()
+    {
+        if (_isRequeueing || _tabs.SelectedIndex != 0) return;
+        var row = _sendGrid.CurrentRow?.DataBoundItem as SyncLogRow;
+        if (row is null) return;
+        _isRequeueing = true;
+        _resyncButton.Text = "جارٍ تجهيز الاستبدال...";
+        UpdateResyncButton();
+        try
+        {
+            long syncId = await _repository.QueueReplacementAsync(row);
+            await ReloadAsync();
+            MessageBox.Show(this,
+                $"تم تجهيز حركة استبدال جديدة رقم {syncId} من النسخة المحلية الحالية.\n" +
+                "سترسلها دورة المزامنة المعتادة. بقيت الحركة السابقة محفوظة.",
+                "إعادة مزامنة المستند", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "تعذر إعادة المزامنة", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _isRequeueing = false;
+            _resyncButton.Text = "إعادة مزامنة المستند";
+            UpdateResyncButton();
+        }
     }
 
     private SyncErrorRow SelectedError() =>
@@ -468,4 +514,5 @@ public sealed class SyncLogsForm : Form
         return dialog.ShowDialog() == DialogResult.OK ? box.Text : null;
     }
 }
+
 

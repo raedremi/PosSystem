@@ -18,7 +18,7 @@ public sealed class InvoicePackageService
         _settings = settings;
     }
 
-    public async Task<InvoiceQueueResult> BuildAndQueueAsync(long invoiceId, int operationType)
+    public async Task<InvoiceQueueResult> BuildAndQueueAsync(long invoiceId, int operationType, string? expectedUuid = null)
     {
         // العمليات المدعومة: إضافة، تعديل، حذف، واستبدال كامل.
         if (operationType is not (1 or 2 or 3 or 4))
@@ -36,6 +36,8 @@ public sealed class InvoicePackageService
             throw new InvalidOperationException($"لم يتم العثور على فاتورة برقم ID = {invoiceId}.");
 
         string invoiceUuid = Convert.ToString(header["inv_uuid"])?.Trim() ?? string.Empty;
+        if (expectedUuid is not null && !string.Equals(invoiceUuid, expectedUuid.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("تغيرت هوية المستند المحلي؛ لم تسجل حركة إعادة المزامنة.");
         if (!Guid.TryParse(invoiceUuid, out _))
             throw new InvalidOperationException("الفاتورة لا تحتوي على inv_uuid صحيح.");
 
@@ -218,4 +220,5 @@ public sealed class InvoicePackageService
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+
 

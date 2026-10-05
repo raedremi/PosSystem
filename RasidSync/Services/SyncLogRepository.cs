@@ -3,6 +3,7 @@ using System.Text;
 using Dapper;
 using MySqlConnector;
 using RasidSync.Models;
+using RasidSync.Vouchers;
 
 namespace RasidSync.Services;
 
@@ -56,6 +57,42 @@ public sealed class SyncLogRepository
         foreach (var row in rows)
             row.DocumentName = SyncDocumentDisplay.Title(row.Payload, row.EntityType, row.EntityUuid);
         return rows;
+    }
+
+    /// <summary>حركة استبدال جديدة من النسخة الحالية، دون تعديل الحركة السابقة.</summary>
+    public async Task<long> QueueReplacementAsync(SyncLogRow row)
+    {
+        if (row.Status != 2)
+            throw new InvalidOperationException("اختر حركة تم إرسالها بنجاح. للحركات الفاشلة استخدم معالجة الأخطاء.");
+        if (row.OperationType == 3)
+            throw new InvalidOperationException("لا يمكن إعادة مزامنة حركة حذف كاستبدال.");
+        bool voucher = row.EntityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase);
+        if (!voucher && !row.EntityType.Equals("Invoice", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("إعادة المزامنة متاحة للفواتير والسندات فقط.");
+        if (!Guid.TryParse(row.EntityUuid, out _))
+            throw new InvalidOperationException("UUID المستند غير صحيح.");
+
+        long localId;
+        await using (MySqlConnection connection = CreateConnection())
+        {
+            await connection.OpenAsync();
+            // LocalId في الحركة القديمة قد يخص قاعدة أخرى؛ نعتمد UUID دائمًا.
+            string sql = voucher
+                ? "SELECT entry_id FROM tbl_gl_entry WHERE gl_uuid=@uuid LIMIT 2"
+                : "SELECT inv_id FROM tbl_invoice WHERE inv_uuid=@uuid LIMIT 2";
+            var ids = (await connection.QueryAsync<long>(sql, new { uuid = row.EntityUuid.Trim() })).ToList();
+            if (ids.Count == 0)
+                throw new InvalidOperationException("المستند غير موجود محليًا أو تم حذفه؛ لم تسجل حركة استبدال.");
+            if (ids.Count != 1)
+                throw new InvalidOperationException("يوجد أكثر من مستند بنفس UUID؛ لم تسجل حركة استبدال.");
+            localId = ids[0];
+        }
+        // نفس تجهيز JSON والهوية والعدادات وحالة الطابور المستخدمة حاليًا.
+        if (voucher)
+            return (await new VoucherPackageService(_settings)
+                .BuildAndQueueAsync(localId, 4, row.EntityUuid)).SyncId;
+        return (await new InvoicePackageService(_settings)
+            .BuildAndQueueAsync(localId, 4, row.EntityUuid)).SyncId;
     }
 
     public async Task RetryAsync(SyncErrorRow error)
@@ -148,4 +185,5 @@ public sealed class SyncLogRepository
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+
 
