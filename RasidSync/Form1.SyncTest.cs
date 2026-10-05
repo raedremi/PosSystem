@@ -497,7 +497,7 @@ public partial class Form1
 
         var title = new Label
         {
-            Text = "أدخل رقم ID الداخلي للسند (entry_id)",
+            Text = "أدخل رقم ID الداخلي للسند (entry_id)\nقبض، دفع، سند قيد، أو قيد افتتاحي",
             Dock = DockStyle.Top,
             Height = 55,
             TextAlign = ContentAlignment.MiddleCenter,
