@@ -15,9 +15,9 @@ void Assert(bool condition, string message) { if (!condition) throw new Exceptio
 var numeric = new HashSet<string> { "cust_id", "acc_id", "cust_typeprice", "cust_discount", "cust_limitdebt", "cust_disenblecredit", "cust_cash", "cust_disenablesales", "cust_type", "cust_free_vat" };
 foreach (string table in new[] { "tbl_sync_customer_applied", "tbl_invoice", "tbl_gl", "tbl_cust", "tbl_account", "tbl_typeprice" })
     await db.ExecuteAsync("DROP TABLE IF EXISTS " + table);
-await db.ExecuteAsync("CREATE TABLE tbl_account (acc_id INT PRIMARY KEY, acc_no BIGINT, acc_perent_no BIGINT, acc_Aname VARCHAR(200), acc_type INT, acc_report INT, acc_level INT, acc_customer INT, acc_debt DECIMAL(20,3), acc_credt DECIMAL(20,3), acc_balance DECIMAL(20,3)) ENGINE=MyISAM");
-await db.ExecuteAsync("CREATE TABLE tbl_cust (" + string.Join(",", CustomerSyncContract.CustomerFields.Select(f => "`" + f + "` " + (numeric.Contains(f) ? "DECIMAL(20,3)" : "VARCHAR(300)") + (f == "cust_id" ? " PRIMARY KEY" : ""))) + ") ENGINE=MyISAM");
-await db.ExecuteAsync("CREATE TABLE tbl_gl (gl_id INT PRIMARY KEY, gl_ac_id INT) ENGINE=MyISAM; CREATE TABLE tbl_typeprice (t_p_id INT PRIMARY KEY) ENGINE=MyISAM; INSERT INTO tbl_typeprice VALUES (1); INSERT INTO tbl_account VALUES (1,1200,0,'Parent',1,1,2,0,0,0,0)");
+await db.ExecuteAsync("CREATE TABLE tbl_account (acc_id INT PRIMARY KEY, acc_no BIGINT, acc_perent_no BIGINT, acc_Aname VARCHAR(200), acc_type INT, acc_report INT, acc_level INT, acc_customer INT, acc_debt DECIMAL(20,3), acc_credt DECIMAL(20,3), acc_balance DECIMAL(20,3)) ENGINE=MyISAM DEFAULT CHARSET=utf8");
+await db.ExecuteAsync("CREATE TABLE tbl_cust (" + string.Join(",", CustomerSyncContract.CustomerFields.Select(f => "`" + f + "` " + (numeric.Contains(f) ? "DECIMAL(20,3)" : "VARCHAR(300)") + (f == "cust_id" ? " PRIMARY KEY" : ""))) + ") ENGINE=MyISAM DEFAULT CHARSET=utf8");
+await db.ExecuteAsync("CREATE TABLE tbl_gl (gl_id INT PRIMARY KEY, gl_ac_id INT) ENGINE=MyISAM DEFAULT CHARSET=utf8; CREATE TABLE tbl_typeprice (t_p_id INT PRIMARY KEY) ENGINE=MyISAM DEFAULT CHARSET=utf8; INSERT INTO tbl_typeprice VALUES (1); INSERT INTO tbl_account VALUES (1,1200,0,'Parent',1,1,2,0,0,0,0)");
 
 JsonElement Payload(long id, long accountId, long number, int type = 1, string name = "First", long parent = 1200, int price = 1)
 {
@@ -66,7 +66,7 @@ await Reject("CUSTOMER_DELETE_IN_USE", () => Apply(customerId, 3, first));
 await db.ExecuteAsync("UPDATE tbl_account SET acc_balance=0,acc_debt=0,acc_credt=0 WHERE acc_id=@id; INSERT INTO tbl_gl VALUES (1,@id)", new { id = accountId });
 await Reject("CUSTOMER_DELETE_IN_USE", () => Apply(customerId, 3, first));
 Assert(await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM tbl_cust WHERE cust_id=@id", new { id = customerId }) == 1, "Rejected delete must keep card.");
-await db.ExecuteAsync("DELETE FROM tbl_gl; CREATE TABLE tbl_invoice (inv_id INT PRIMARY KEY,inv_acc_id INT) ENGINE=MyISAM; INSERT INTO tbl_invoice VALUES (1,@id)", new { id = accountId });
+await db.ExecuteAsync("DELETE FROM tbl_gl; CREATE TABLE tbl_invoice (inv_id INT PRIMARY KEY,inv_acc_id INT) ENGINE=MyISAM DEFAULT CHARSET=utf8; INSERT INTO tbl_invoice VALUES (1,@id)", new { id = accountId });
 await Reject("CUSTOMER_DELETE_IN_USE", () => Apply(customerId, 3, first));
 await db.ExecuteAsync("DROP TABLE tbl_invoice");
 string deleteEvent = Guid.NewGuid().ToString();
