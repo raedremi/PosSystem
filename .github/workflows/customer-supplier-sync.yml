@@ -26,4 +26,4 @@ jobs:
       - run: dotnet build RasidSync/RasidSync.csproj -p:EnableWindowsTargeting=true
       - run: dotnet run --project Tests/CustomerSupplierSync/CustomerSyncTests.csproj
         env:
-          CUSTOMER_SYNC_TEST_CONNECTION: Server=127.0.0.1;Port=3306;Database=customer_sync_test;User ID=root;Password=customer_sync_ci_only
+          CUSTOMER_SYNC_TEST_CONNECTION: Server=127.0.0.1;Port=3306;Database=customer_sync_test;User ID=root;Password=customer_sync_ci_only;SslMode=Disabled
