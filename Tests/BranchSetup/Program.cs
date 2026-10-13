@@ -10,7 +10,7 @@ await using var db = new MySqlConnection(builder.ConnectionString);
 await db.OpenAsync();
 var settings = new SyncSettings { LocalServer = builder.Server, LocalPort = builder.Port, LocalDatabase = builder.Database,
     LocalUsername = builder.UserID, LocalPassword = builder.Password };
-var service = new BranchSetupService(settings);
+var service = new BranchSetupService(settings, () => new MySqlConnection(builder.ConnectionString));
 int passed = 0;
 void Assert(bool ok, string message) { if (!ok) throw new Exception(message); passed++; }
 async Task Reject(Func<Task> action)
@@ -31,7 +31,7 @@ async Task Fixture()
         INSERT INTO tbl_sync_receive VALUES(49,55);
         INSERT INTO tbl_sync_state VALUES('LastReceivedId','4',NOW());
         INSERT INTO tbl_sync_id_counter VALUES(1,900);");
-    await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+    await new SyncInfrastructureService(settings).EnsureCreatedAsync(db);
 }
 await Fixture();
 Assert(await service.PreviewAsync() == 100, "Baseline comes from copied server send table, not old cursor.");

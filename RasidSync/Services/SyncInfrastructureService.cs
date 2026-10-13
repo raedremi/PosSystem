@@ -13,7 +13,7 @@ public sealed class SyncInfrastructureService
 
     public SyncInfrastructureService(SyncSettings settings) => _settings = settings;
 
-    public async Task EnsureCreatedAsync()
+    public async Task EnsureCreatedAsync(MySqlConnection? existingConnection = null)
     {
         const string sql = """
             CREATE TABLE IF NOT EXISTS tbl_sync_errors
@@ -57,6 +57,12 @@ public sealed class SyncInfrastructureService
                 ('MergeInvoiceIdentity', 0, NOW());
             """;
 
+        if (existingConnection is not null)
+        {
+            await using var existingCommand = new MySqlCommand(sql, existingConnection);
+            await existingCommand.ExecuteNonQueryAsync();
+            return;
+        }
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
         await using var command = new MySqlCommand(sql, connection);
@@ -77,3 +83,4 @@ public sealed class SyncInfrastructureService
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+

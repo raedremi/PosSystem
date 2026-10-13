@@ -9,8 +9,13 @@ namespace RasidSync.Services;
 public sealed class BranchSetupService
 {
     private readonly SyncSettings _settings;
+    private readonly Func<MySqlConnection>? _connectionFactory;
     private static readonly string[] Tables = { "tbl_sync_send", "tbl_sync_receive", "tbl_sync_errors" };
-    public BranchSetupService(SyncSettings settings) => _settings = settings;
+    public BranchSetupService(SyncSettings settings, Func<MySqlConnection>? connectionFactory = null)
+    {
+        _settings = settings;
+        _connectionFactory = connectionFactory;
+    }
 
     public async Task<long> PreviewAsync()
     {
@@ -21,9 +26,9 @@ public sealed class BranchSetupService
 
     public async Task<long> InitializeAsync(long expectedBaseline)
     {
-        await new SyncInfrastructureService(_settings).EnsureCreatedAsync();
         await using var db = CreateConnection();
         await db.OpenAsync();
+        await new SyncInfrastructureService(_settings).EnsureCreatedAsync(db);
         // تبقى نسخة السجلات القديمة في القاعدة، ويمكن مراجعتها عند الحاجة.
         foreach (string table in Tables)
             await db.ExecuteAsync($"CREATE TABLE IF NOT EXISTS {table}_branch_backup LIKE {table}");
@@ -71,7 +76,7 @@ public sealed class BranchSetupService
         db.QuerySingleOrDefaultAsync<string?>("SELECT state_value FROM tbl_sync_state WHERE state_key=@key", new { key });
     private static Task SetStateAsync(MySqlConnection db, string key, string value) =>
         db.ExecuteAsync("INSERT INTO tbl_sync_state(state_key,state_value,updated_at) VALUES (@key,@value,NOW()) ON DUPLICATE KEY UPDATE state_value=@value,updated_at=NOW()", new { key, value });
-    private MySqlConnection CreateConnection() => new(new MySqlConnectionStringBuilder
+    private MySqlConnection CreateConnection() => _connectionFactory?.Invoke() ?? new(new MySqlConnectionStringBuilder
     {
         Server = _settings.LocalServer, Port = _settings.LocalPort, Database = _settings.LocalDatabase,
         UserID = _settings.LocalUsername, Password = _settings.LocalPassword
