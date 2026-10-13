@@ -1,3 +1,4 @@
+using RasidSync.CustomerSupplierSync;
 using RasidSync.Models;
 
 namespace RasidSync.Services;
@@ -14,6 +15,7 @@ public sealed class PendingSyncService
         var repository = new LocalSyncRepository(settings);
         var apiClient = new SyncApiClient(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+        await new CustomerPackageService(settings).RecoverPreparedDeletesAsync();
 
         int sentCount = 0;
         int blockedCount = 0;
@@ -88,4 +90,5 @@ public sealed class PendingSyncService
             : prefix;
     }
 }
+
 
