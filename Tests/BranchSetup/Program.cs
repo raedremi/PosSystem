@@ -59,7 +59,9 @@ try { await service.InitializeAsync(100); throw new Exception("Expected injected
 catch (MySqlException) { passed++; }
 Assert(await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM tbl_sync_send") == 0, "Injected failure follows partial cleanup.");
 Assert(await service.PreviewAsync() == 100, "Interrupted setup retains original baseline.");
+await Reject(() => service.EnsureReadyAsync());
 await db.ExecuteAsync("DROP TRIGGER fail_branch_delete");
 Assert(await service.InitializeAsync(100) == 100, "Interrupted initialization can resume.");
 Assert(await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM tbl_sync_send_branch_backup") == 1, "Resume does not overwrite backup.");
+await service.EnsureReadyAsync();
 Console.WriteLine($"PASS: {passed} branch setup assertions on MySQL/MyISAM.");

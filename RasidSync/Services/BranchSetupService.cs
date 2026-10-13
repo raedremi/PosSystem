@@ -24,6 +24,14 @@ public sealed class BranchSetupService
         return await ReadBaselineAsync(db);
     }
 
+    public async Task EnsureReadyAsync()
+    {
+        await using var db = CreateConnection();
+        await db.OpenAsync();
+        if (await StateAsync(db, "BranchSetupPending") != null)
+            throw new InvalidOperationException("تهيئة الفرع لم تكتمل. أعد تنفيذ التهيئة قبل الإرسال أو الاستقبال.");
+    }
+
     public async Task<long> InitializeAsync(long expectedBaseline)
     {
         await using var db = CreateConnection();

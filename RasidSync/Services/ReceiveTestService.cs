@@ -21,6 +21,7 @@ public sealed class ReceiveSyncService
         var voucherService = new LocalVoucherApplyService(settings);
         var customerService = new LocalCustomerApplyService(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+        await new BranchSetupService(settings).EnsureReadyAsync();
 
         long cursor = await repository.GetLastReceivedIdAsync();
         PullSyncResponse response = await apiClient.PullAsync(cursor);
@@ -117,5 +118,6 @@ public sealed class ReceiveSyncService
             : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} حركة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
+
 
 
