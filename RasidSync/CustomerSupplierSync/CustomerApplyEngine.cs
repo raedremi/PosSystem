@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -109,21 +109,30 @@ public static class CustomerApplyEngine
     private static async Task CheckReferencesAsync(IDbConnection db, CustomerPackage p)
     {
         // أسماء مراجع رصيد المعروفة + أي FK معلن. لا نحذف السجلات التابعة المالية.
-        const string sql = @"SELECT DISTINCT c.TABLE_NAME TableName, c.COLUMN_NAME ColumnName,
-            CASE WHEN c.COLUMN_NAME='cust_id' OR k.REFERENCED_COLUMN_NAME='cust_id' THEN 1 ELSE 0 END IsCustomer
+        const string sql = @"SELECT c.TABLE_NAME TableName, c.COLUMN_NAME ColumnName,
+            CASE WHEN c.COLUMN_NAME='cust_id' THEN 1 ELSE 0 END IsCustomer
             FROM information_schema.COLUMNS c
-            LEFT JOIN information_schema.KEY_COLUMN_USAGE k ON k.TABLE_SCHEMA=c.TABLE_SCHEMA
-              AND k.TABLE_NAME=c.TABLE_NAME AND k.COLUMN_NAME=c.COLUMN_NAME
-            WHERE c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME NOT IN ('tbl_cust','tbl_account')
-              AND (c.COLUMN_NAME IN ('acc_id','cust_id','gl_ac_id','inv_acc_id','inv_acc','inv_acc2',
-                   'inv_acc_cash','inv_acc_disc','inv_acc_tax','entry_acc_def','entry_acc2','entry_acc_disc','entry_acc_tax')
-                   OR c.COLUMN_NAME LIKE '%\\_acc\\_id' OR c.COLUMN_NAME LIKE '%\\_accountid'
-                   OR (k.REFERENCED_TABLE_NAME='tbl_cust' AND k.REFERENCED_COLUMN_NAME='cust_id')
-                   OR (k.REFERENCED_TABLE_NAME='tbl_account' AND k.REFERENCED_COLUMN_NAME='acc_id'));";
-        var references = await db.QueryAsync<ReferenceColumn>(sql);
+            WHERE c.TABLE_SCHEMA=@schema AND c.TABLE_NAME=@table
+              AND (c.COLUMN_NAME IN ('acc_id','cust_id','gl_ac_id','gl_ac_id_app','cus_id','due_cust_id','inv_acc_id','inv_acc','inv_acc2',
+                   'inv_acc_cash','inv_acc_disc','inv_acc_tax','inv_acc_item','inv_acc_prices','inv_pay_acc_disc','entry_acc_def','entry_acc2','entry_acc_disc','entry_acc_tax')
+                   OR RIGHT(c.COLUMN_NAME,7)='_acc_id' OR RIGHT(c.COLUMN_NAME,10)='_accountid')
+            UNION
+            SELECT k.TABLE_NAME TableName,k.COLUMN_NAME ColumnName,
+                   CASE WHEN k.REFERENCED_COLUMN_NAME='cust_id' THEN 1 ELSE 0 END IsCustomer
+            FROM information_schema.KEY_COLUMN_USAGE k
+            WHERE k.TABLE_SCHEMA=@schema AND k.TABLE_NAME=@table
+              AND k.REFERENCED_TABLE_SCHEMA=@schema
+              AND ((k.REFERENCED_TABLE_NAME='tbl_cust' AND k.REFERENCED_COLUMN_NAME='cust_id')
+                OR (k.REFERENCED_TABLE_NAME='tbl_account' AND k.REFERENCED_COLUMN_NAME='acc_id'));";
+        // لا تعد عروض البيانات حركات؛ نقرأ مراجع كل جدول فعلي داخل القاعدة الحالية فقط.
+        string schema = db.Database;
+        var tables = (await db.QueryAsync<string>("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=@schema AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('tbl_cust','tbl_account')", new { schema })).ToList();
+        var references = new List<ReferenceColumn>();
+        foreach (string table in tables)
+            references.AddRange(await db.QueryAsync<ReferenceColumn>(sql, new { schema, table }));
         foreach (var reference in references)
-            if (await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM " + Quote(reference.TableName) + " WHERE " +
-                Quote(reference.ColumnName) + "=@id", new { id = reference.IsCustomer == 1 ? p.CustomerId : p.AccountId }) != 0)
+            if (await db.ExecuteScalarAsync<int>("SELECT EXISTS(SELECT 1 FROM " + Quote(reference.TableName) + " WHERE " +
+                Quote(reference.ColumnName) + "=@id)", new { id = reference.IsCustomer == 1 ? p.CustomerId : p.AccountId }) != 0)
                 throw CustomerSyncContract.Error("CUSTOMER_DELETE_IN_USE", "يوجد ارتباط في " + reference.TableName + "." + reference.ColumnName);
     }
 
