@@ -1,3 +1,4 @@
+using RasidSync.CustomerSupplierSync;
 using System.Security.Cryptography;
 using System.Text;
 using Dapper;
@@ -66,6 +67,11 @@ public sealed class SyncLogRepository
             throw new InvalidOperationException("اختر حركة تم إرسالها بنجاح. للحركات الفاشلة استخدم معالجة الأخطاء.");
         if (row.OperationType == 3)
             throw new InvalidOperationException("لا يمكن إعادة مزامنة حركة حذف كاستبدال.");
+        if (row.EntityType.Equals("CustomerSupplier", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!row.LocalId.HasValue) throw new InvalidOperationException("معرف البطاقة غير موجود في الحركة.");
+            return await new CustomerPackageService(_settings).BuildAndQueueAsync(row.LocalId.Value, 4, row.EntityUuid);
+        }
         bool voucher = row.EntityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase);
         if (!voucher && !row.EntityType.Equals("Invoice", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("إعادة المزامنة متاحة للفواتير والسندات فقط.");
@@ -185,5 +191,6 @@ public sealed class SyncLogRepository
         return new MySqlConnection(builder.ConnectionString);
     }
 }
+
 
 

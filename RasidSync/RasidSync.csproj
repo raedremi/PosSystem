@@ -13,4 +13,8 @@
     <PackageReference Include="MySqlConnector" Version="2.4.0" />
   </ItemGroup>
 
+<ItemGroup>
+  <EmbeddedResource Remove="Form1.SyncTest.resx" />
+  <EmbeddedResource Remove="Form1.Tray.resx" />
+</ItemGroup>
 </Project>

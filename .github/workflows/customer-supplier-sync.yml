@@ -1,0 +1,33 @@
+name: Customer supplier sync
+on:
+  pull_request:
+    paths: ['RasidSync/**', 'Tests/**', '.github/workflows/customer-supplier-sync.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: customer_sync_ci_only
+          MYSQL_DATABASE: customer_sync_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pcustomer_sync_ci_only"
+          --health-interval=10s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet build RasidSync/RasidSync.csproj -p:EnableWindowsTargeting=true
+      - run: dotnet run --project Tests/CustomerSupplierSync/CustomerSyncTests.csproj
+        env:
+          CUSTOMER_SYNC_TEST_CONNECTION: Server=127.0.0.1;Port=3306;Database=customer_sync_test;User ID=root;Password=customer_sync_ci_only;SslMode=Disabled
+      - run: dotnet run --project Tests/BranchSetup/BranchSetupTests.csproj
+        env:
+          CUSTOMER_SYNC_TEST_CONNECTION: Server=127.0.0.1;Port=3306;Database=customer_sync_test;User ID=root;Password=customer_sync_ci_only;SslMode=Disabled
+
