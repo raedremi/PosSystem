@@ -72,6 +72,11 @@ public sealed class SyncLogRepository
             if (!row.LocalId.HasValue) throw new InvalidOperationException("معرف البطاقة غير موجود في الحركة.");
             return await new CustomerPackageService(_settings).BuildAndQueueAsync(row.LocalId.Value, 4, row.EntityUuid);
         }
+        if (row.EntityType.Equals("Item", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!row.LocalId.HasValue) throw new InvalidOperationException("معرّف الصنف غير موجود.");
+            return await new RasidSync.ItemSync.ItemPackageService(_settings).BuildAndQueueAsync(row.LocalId.Value, row.EntityUuid);
+        }
         bool voucher = row.EntityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase);
         if (!voucher && !row.EntityType.Equals("Invoice", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("إعادة المزامنة متاحة للفواتير والسندات فقط.");

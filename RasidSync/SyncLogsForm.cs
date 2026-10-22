@@ -401,7 +401,8 @@ public sealed class SyncLogsForm : Form
             && row.Status == 2 && row.OperationType != 3
             && (row.EntityType.Equals("Invoice", StringComparison.OrdinalIgnoreCase)
                 || row.EntityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase)
-                || row.EntityType.Equals("CustomerSupplier", StringComparison.OrdinalIgnoreCase));
+                || row.EntityType.Equals("CustomerSupplier", StringComparison.OrdinalIgnoreCase)
+                || row.EntityType.Equals("Item", StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task RequeueSelectedAsync()

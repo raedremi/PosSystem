@@ -70,6 +70,11 @@ public sealed class ReceiveSyncService
                     await customerService.ApplyAsync(item);
                     applied++;
                 }
+                else if (string.Equals(item.EntityType, "Item", StringComparison.OrdinalIgnoreCase))
+                {
+                    await new RasidSync.ItemSync.LocalItemApplyService(settings).ApplyAsync(item);
+                    applied++;
+                }
                 else
                 {
                     // الحركات التجريبية أو الأنواع التي سنضيفها لاحقًا لا توقف طابور الفواتير.
