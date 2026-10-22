@@ -1,3 +1,4 @@
+using RasidSync.CustomerSupplierSync;
 using RasidSync.Vouchers;
 using RasidSync.Models;
 
@@ -18,7 +19,9 @@ public sealed class ReceiveSyncService
         var apiClient = new PullApiClient(settings);
         var invoiceService = new LocalInvoiceApplyService(settings);
         var voucherService = new LocalVoucherApplyService(settings);
+        var customerService = new LocalCustomerApplyService(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+        await new BranchSetupService(settings).EnsureReadyAsync();
 
         long cursor = await repository.GetLastReceivedIdAsync();
         PullSyncResponse response = await apiClient.PullAsync(cursor);
@@ -60,6 +63,16 @@ public sealed class ReceiveSyncService
                 else if (string.Equals(item.EntityType, "Voucher", StringComparison.OrdinalIgnoreCase))
                 {
                     await voucherService.ApplyAsync(item);
+                    applied++;
+                }
+                else if (string.Equals(item.EntityType, "CustomerSupplier", StringComparison.OrdinalIgnoreCase))
+                {
+                    await customerService.ApplyAsync(item);
+                    applied++;
+                }
+                else if (string.Equals(item.EntityType, "Item", StringComparison.OrdinalIgnoreCase))
+                {
+                    await new RasidSync.ItemSync.LocalItemApplyService(settings).ApplyAsync(item);
                     applied++;
                 }
                 else
@@ -110,4 +123,6 @@ public sealed class ReceiveSyncService
             : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} حركة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
+
+
 

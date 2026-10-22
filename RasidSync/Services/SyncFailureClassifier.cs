@@ -37,6 +37,11 @@ public static class SyncFailureClassifier
     {
         string message = GetFullMessage(exception);
 
+        foreach (string code in new[] { "INVALID_ITEM_PAYLOAD", "ITEM_ID_RANGE", "ITEM_ID_CONFLICT", "ITEM_UNIT_CONFLICT", "ITEM_NAME_CONFLICT", "ITEM_DEPENDENCY_CONFLICT", "ITEM_DELETE_IN_USE", "ITEM_DELETED", "ITEM_NOT_FOUND", "ITEM_APPLY_ERROR", "INVALID_CUSTOMER_PAYLOAD", "CUSTOMER_ID_RANGE", "CUSTOMER_ID_CONFLICT",
+            "CUSTOMER_ACCOUNT_CONFLICT", "CUSTOMER_PARENT_MISSING", "CUSTOMER_PRICE_MISSING",
+            "CUSTOMER_DELETE_IN_USE", "CUSTOMER_PARTIAL_DELETE", "CUSTOMER_SCHEMA_MISMATCH", "CUSTOMER_APPLY_ERROR" })
+            if (message.Contains(code, StringComparison.OrdinalIgnoreCase)) return code;
+
         if (message.Contains("VOUCHER_NUMBER_CONFLICT", StringComparison.OrdinalIgnoreCase))
             return "VOUCHER_NUMBER_CONFLICT";
         if (message.Contains("INVALID_VOUCHER_PAYLOAD", StringComparison.OrdinalIgnoreCase))
@@ -82,4 +87,5 @@ public static class SyncFailureClassifier
         1049 or    // Unknown database
         2002 or 2003 or 2006 or 2013;
 }
+
 

@@ -97,6 +97,7 @@ public partial class Form1
         _actionsPanel.Controls.Add(_queueInvoiceButton);
         _actionsPanel.Controls.Add(_queueVoucherButton);
         _actionsPanel.Controls.Add(_syncLogsButton);
+        AddBranchSetupButton();
     }
 
     private async Task OpenSyncLogsAsync()
@@ -549,3 +550,4 @@ public partial class Form1
             : null;
     }
 }
+

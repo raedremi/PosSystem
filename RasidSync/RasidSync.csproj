@@ -4,13 +4,19 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <Version>1.1.0</Version>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="MySqlConnector" Version="2.4.0" />
   </ItemGroup>
 
+<ItemGroup>
+  <EmbeddedResource Remove="Form1.SyncTest.resx" />
+  <EmbeddedResource Remove="Form1.Tray.resx" />
+</ItemGroup>
 </Project>

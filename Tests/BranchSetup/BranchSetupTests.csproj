@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
+    <Compile Include="../../RasidSync/Services/BranchSetupService.cs" Link="BranchSetupService.cs" />
+    <Compile Include="../../RasidSync/Services/SyncInfrastructureService.cs" Link="SyncInfrastructureService.cs" />
+    <Compile Include="../../RasidSync/Models/SyncSettings.cs" Link="SyncSettings.cs" />
+  </ItemGroup>
+</Project>
