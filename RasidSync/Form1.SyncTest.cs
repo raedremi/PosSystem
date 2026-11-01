@@ -1,4 +1,4 @@
-using RasidSync.Vouchers;
+﻿using RasidSync.Vouchers;
 using RasidSync.Models;
 using RasidSync.Services;
 
@@ -98,6 +98,7 @@ public partial class Form1
         _actionsPanel.Controls.Add(_queueVoucherButton);
         _actionsPanel.Controls.Add(_syncLogsButton);
         AddBranchSetupButton();
+        AddReceiveCounterButton();
     }
 
     private async Task OpenSyncLogsAsync()

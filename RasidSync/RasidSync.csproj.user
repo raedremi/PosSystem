@@ -7,10 +7,16 @@
     <Compile Update="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="Form1.ReceiveCounter.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Form1.SyncTest.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="Form1.Tray.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ReceiveCounterForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="SyncLogsForm.cs">

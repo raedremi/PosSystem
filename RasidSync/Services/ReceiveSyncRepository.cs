@@ -1,4 +1,4 @@
-using MySqlConnector;
+﻿using MySqlConnector;
 using RasidSync.Models;
 
 namespace RasidSync.Services;
@@ -48,8 +48,18 @@ public sealed class ReceiveSyncRepository
         }
     }
 
-    public async Task<int?> GetApplyStatusAsync(long serverEventId)
+    public async Task<int?> GetApplyStatusAsync(long serverEventId, string? eventUuid = null)
     {
+        // الرقم وحده غير كافٍ بعد تبديل قاعدة السيرفر؛ UUID يمنع تجاوز حركة مختلفة.
+        await using (var identityConnection = CreateConnection())
+        {
+            await identityConnection.OpenAsync();
+            await using var identityCommand = new MySqlCommand("SELECT event_uuid FROM tbl_sync_receive WHERE server_event_id=@id LIMIT 1", identityConnection);
+            identityCommand.Parameters.AddWithValue("@id", serverEventId);
+            string? savedUuid = Convert.ToString(await identityCommand.ExecuteScalarAsync());
+            if (eventUuid != null && !string.IsNullOrEmpty(savedUuid) && !string.Equals(savedUuid,eventUuid,StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("رقم حركة الاستقبال مرتبط بسيرفر مختلف. لم يتم تجاوز الحركة أو تطبيقها.");
+        }
         const string sql = "SELECT apply_status FROM tbl_sync_receive WHERE server_event_id=@id LIMIT 1;";
         await using MySqlConnection connection = CreateConnection();
         await connection.OpenAsync();
