@@ -55,6 +55,15 @@ public static class SyncDocumentDisplay
             if (Property(doc.RootElement, "Metadata") is not JsonElement) return "";
         }
         catch (JsonException) { return ""; }
+        if (entityType.Equals("CustomerSupplier", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(payload ?? "{}");
+                return Text(Property(Property(doc.RootElement, "Metadata") ?? default, "DocumentName"));
+            }
+            catch (JsonException) { return ""; }
+        }
         bool voucher = entityType.Equals("Voucher", StringComparison.OrdinalIgnoreCase);
         var info = Read(payload, voucher);
         string name = info.Name ?? "";
@@ -81,3 +90,4 @@ public static class SyncDocumentDisplay
         return null;
     }
 }
+

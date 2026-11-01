@@ -1,3 +1,4 @@
+﻿using RasidSync.CustomerSupplierSync;
 using RasidSync.Vouchers;
 using RasidSync.Models;
 
@@ -18,7 +19,10 @@ public sealed class ReceiveSyncService
         var apiClient = new PullApiClient(settings);
         var invoiceService = new LocalInvoiceApplyService(settings);
         var voucherService = new LocalVoucherApplyService(settings);
+        var customerService = new LocalCustomerApplyService(settings);
         await new SyncInfrastructureService(settings).EnsureCreatedAsync();
+        await new BranchSetupService(settings).EnsureReadyAsync();
+        await new ReceiveCounterService(settings).EnsureAutomaticAsync();
 
         long cursor = await repository.GetLastReceivedIdAsync();
         PullSyncResponse response = await apiClient.PullAsync(cursor);
@@ -29,7 +33,23 @@ public sealed class ReceiveSyncService
         int blocked = 0;
         foreach (PulledSyncEvent item in response.Events.OrderBy(x => x.ServerEventId))
         {
-            int? status = await repository.GetApplyStatusAsync(item.ServerEventId);
+            int? status = await repository.GetApplyStatusAsync(item.ServerEventId, item.EventUuid);
+            // سجلات النجاح القديمة لا تكفي للصنف دون إيصال من محرك التطبيق نفسه.
+            if (status == 2 && string.Equals(item.EntityType, "Item", StringComparison.OrdinalIgnoreCase))
+            {
+                await using var check = CustomerPackageService.CreateConnection(settings);
+                await check.OpenAsync();
+                using var command = check.CreateCommand();
+                command.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='tbl_sync_item_jobs'";
+                bool hasJobs = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+                if (hasJobs)
+                {
+                    command.CommandText = "SELECT COUNT(*) FROM tbl_sync_item_jobs WHERE event_uuid=@event AND job_state=1";
+                    command.Parameters.AddWithValue("@event", item.EventUuid);
+                    hasJobs = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+                }
+                if (!hasJobs) status = 0;
+            }
             if (status == 2)
             {
                 await repository.AdvanceCursorAsync(item.ServerEventId);
@@ -60,6 +80,16 @@ public sealed class ReceiveSyncService
                 else if (string.Equals(item.EntityType, "Voucher", StringComparison.OrdinalIgnoreCase))
                 {
                     await voucherService.ApplyAsync(item);
+                    applied++;
+                }
+                else if (string.Equals(item.EntityType, "CustomerSupplier", StringComparison.OrdinalIgnoreCase))
+                {
+                    await customerService.ApplyAsync(item);
+                    applied++;
+                }
+                else if (string.Equals(item.EntityType, "Item", StringComparison.OrdinalIgnoreCase))
+                {
+                    await new RasidSync.ItemSync.LocalItemApplyService(settings).ApplyAsync(item);
                     applied++;
                 }
                 else
@@ -110,4 +140,6 @@ public sealed class ReceiveSyncService
             : $"تم استقبال {response.Events.Count} حركة، تطبيق {applied} حركة، تحويل {blocked} حركة للأخطاء، وتجاوز {skipped} حركة غير مدعومة. المؤشر {Math.Max(cursor, response.NextCursor)}.";
     }
 }
+
+
 

@@ -40,9 +40,13 @@ public partial class Form1 : Form
     {
         InitializeComponent();
         BuildInterface();
+
         InitializeTrayFeatures();
+
         Load += async (_, _) => await LoadSettingsAsync();
+
         _syncTimer.Tick += async (_, _) => await RunAutomaticSyncAsync();
+
         FormClosed += (_, _) => _syncTimer.Dispose();
     }
 
